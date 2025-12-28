@@ -7,6 +7,14 @@ import { API_PREFIX } from './config/constants';
 
 // Import routes
 import authRoutes from './modules/auth/auth.routes';
+import profileRoutes from './modules/profile/profile.routes';
+import kycRoutes from './modules/kyc/kyc.routes';
+import invoiceRoutes from './modules/invoices/invoice.routes';
+import discountRoutes from './modules/discounts/discount.routes';
+import bidRoutes from './modules/bids/bid.routes';
+import disbursementRoutes from './modules/disbursements/disbursement.routes';
+import notificationRoutes from './modules/notifications/notification.routes';
+import adminRoutes from './modules/admin/admin.routes';
 
 export function createApp(): Express {
   const app = express();
@@ -31,6 +39,14 @@ export function createApp(): Express {
 
   // API Routes
   app.use(`${API_PREFIX}/auth`, authRoutes);
+  app.use(`${API_PREFIX}/profile`, profileRoutes);
+  app.use(`${API_PREFIX}/kyc`, kycRoutes);
+  app.use(`${API_PREFIX}/invoices`, invoiceRoutes);
+  app.use(`${API_PREFIX}/discounts`, discountRoutes);
+  app.use(`${API_PREFIX}/bids`, bidRoutes);
+  app.use(`${API_PREFIX}/disbursements`, disbursementRoutes);
+  app.use(`${API_PREFIX}/notifications`, notificationRoutes);
+  app.use(`${API_PREFIX}/admin`, adminRoutes);
 
   // 404 handler
   app.use(notFoundHandler);

@@ -1,4 +1,4 @@
-import jwt from 'jsonwebtoken';
+import jwt, { SignOptions } from 'jsonwebtoken';
 import { env } from '../config/env';
 import { UserType } from '@prisma/client';
 
@@ -16,13 +16,13 @@ export interface TokenPair {
 export function generateAccessToken(payload: JwtPayload): string {
   return jwt.sign(payload, env.jwt.secret, {
     expiresIn: env.jwt.accessExpiresIn,
-  });
+  } as SignOptions);
 }
 
 export function generateRefreshToken(payload: JwtPayload): string {
   return jwt.sign(payload, env.jwt.secret, {
     expiresIn: env.jwt.refreshExpiresIn,
-  });
+  } as SignOptions);
 }
 
 export function generateTokenPair(payload: JwtPayload): TokenPair {
