@@ -1,0 +1,556 @@
+// Prisma Schema for CredInvoice
+// Supply Chain Finance Platform
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================
+// USER & AUTHENTICATION
+// ============================================
+
+model User {
+  id            String    @id @default(uuid())
+  email         String    @unique
+  passwordHash  String    @map("password_hash")
+  userType      UserType  @map("user_type")
+  status        UserStatus @default(PENDING)
+  twoFactorSecret String? @map("two_factor_secret")
+  twoFactorEnabled Boolean @default(false) @map("two_factor_enabled")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+
+  // Relations
+  buyer         Buyer?
+  seller        Seller?
+  financier     Financier?
+  refreshTokens RefreshToken[]
+  notifications Notification[]
+  auditLogs     AuditLog[]
+
+  @@map("users")
+}
+
+model RefreshToken {
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
+  token     String   @unique
+  expiresAt DateTime @map("expires_at")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("refresh_tokens")
+}
+
+// ============================================
+// BUYER (Large Enterprise / Anchor)
+// ============================================
+
+model Buyer {
+  id           String    @id @default(uuid())
+  userId       String    @unique @map("user_id")
+  companyName  String    @map("company_name")
+  gstin        String?   @unique
+  pan          String?
+  industry     String?
+  address      String?
+  city         String?
+  state        String?
+  pincode      String?
+  contactName  String?   @map("contact_name")
+  contactPhone String?   @map("contact_phone")
+  kycStatus    KycStatus @default(PENDING) @map("kyc_status")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+
+  user              User                    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  bankAccounts      BankAccount[]
+  kycDocuments      KycDocument[]
+  invoices          Invoice[]               @relation("BuyerInvoices")
+  discountOffers    DiscountOffer[]
+  buyerFinanciers   BuyerFinancierMapping[]
+  buyerSellers      BuyerSellerMapping[]
+
+  @@map("buyers")
+}
+
+// ============================================
+// SELLER (MSME / Supplier)
+// ============================================
+
+model Seller {
+  id           String    @id @default(uuid())
+  userId       String    @unique @map("user_id")
+  companyName  String    @map("company_name")
+  gstin        String?   @unique
+  pan          String?
+  businessType String?   @map("business_type")
+  address      String?
+  city         String?
+  state        String?
+  pincode      String?
+  contactName  String?   @map("contact_name")
+  contactPhone String?   @map("contact_phone")
+  kycStatus    KycStatus @default(PENDING) @map("kyc_status")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+
+  user              User                     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  bankAccounts      BankAccount[]
+  kycDocuments      KycDocument[]
+  invoices          Invoice[]                @relation("SellerInvoices")
+  sellerFinanciers  SellerFinancierMapping[]
+  buyerSellers      BuyerSellerMapping[]
+
+  @@map("sellers")
+}
+
+// ============================================
+// FINANCIER (Bank / NBFC)
+// ============================================
+
+model Financier {
+  id           String    @id @default(uuid())
+  userId       String    @unique @map("user_id")
+  companyName  String    @map("company_name")
+  rbiLicense   String?   @map("rbi_license")
+  entityType   String?   @map("entity_type") // BANK, NBFC, etc.
+  address      String?
+  city         String?
+  state        String?
+  pincode      String?
+  contactName  String?   @map("contact_name")
+  contactPhone String?   @map("contact_phone")
+  kycStatus    KycStatus @default(PENDING) @map("kyc_status")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+
+  user              User                     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  bankAccounts      BankAccount[]
+  kycDocuments      KycDocument[]
+  bids              Bid[]
+  buyerFinanciers   BuyerFinancierMapping[]
+  sellerFinanciers  SellerFinancierMapping[]
+  disbursements     Disbursement[]
+
+  @@map("financiers")
+}
+
+// ============================================
+// MAPPINGS (Relationships between entities)
+// ============================================
+
+model BuyerSellerMapping {
+  id        String        @id @default(uuid())
+  buyerId   String        @map("buyer_id")
+  sellerId  String        @map("seller_id")
+  status    MappingStatus @default(ACTIVE)
+  mappedAt  DateTime      @default(now()) @map("mapped_at")
+
+  buyer  Buyer  @relation(fields: [buyerId], references: [id], onDelete: Cascade)
+  seller Seller @relation(fields: [sellerId], references: [id], onDelete: Cascade)
+
+  @@unique([buyerId, sellerId])
+  @@map("buyer_seller_mappings")
+}
+
+model BuyerFinancierMapping {
+  id          String        @id @default(uuid())
+  buyerId     String        @map("buyer_id")
+  financierId String        @map("financier_id")
+  status      MappingStatus @default(ACTIVE)
+  mappedAt    DateTime      @default(now()) @map("mapped_at")
+
+  buyer     Buyer     @relation(fields: [buyerId], references: [id], onDelete: Cascade)
+  financier Financier @relation(fields: [financierId], references: [id], onDelete: Cascade)
+
+  @@unique([buyerId, financierId])
+  @@map("buyer_financier_mappings")
+}
+
+model SellerFinancierMapping {
+  id          String        @id @default(uuid())
+  sellerId    String        @map("seller_id")
+  financierId String        @map("financier_id")
+  status      MappingStatus @default(ACTIVE)
+  mappedAt    DateTime      @default(now()) @map("mapped_at")
+
+  seller    Seller    @relation(fields: [sellerId], references: [id], onDelete: Cascade)
+  financier Financier @relation(fields: [financierId], references: [id], onDelete: Cascade)
+
+  @@unique([sellerId, financierId])
+  @@map("seller_financier_mappings")
+}
+
+// ============================================
+// BANK ACCOUNTS
+// ============================================
+
+model BankAccount {
+  id          String     @id @default(uuid())
+  entityType  EntityType @map("entity_type")
+  buyerId     String?    @map("buyer_id")
+  sellerId    String?    @map("seller_id")
+  financierId String?    @map("financier_id")
+  accountNo   String     @map("account_no")
+  ifscCode    String     @map("ifsc_code")
+  bankName    String     @map("bank_name")
+  branchName  String?    @map("branch_name")
+  accountType String?    @map("account_type") // SAVINGS, CURRENT
+  isPrimary   Boolean    @default(false) @map("is_primary")
+  isVerified  Boolean    @default(false) @map("is_verified")
+  createdAt   DateTime   @default(now()) @map("created_at")
+  updatedAt   DateTime   @updatedAt @map("updated_at")
+
+  buyer     Buyer?     @relation(fields: [buyerId], references: [id], onDelete: Cascade)
+  seller    Seller?    @relation(fields: [sellerId], references: [id], onDelete: Cascade)
+  financier Financier? @relation(fields: [financierId], references: [id], onDelete: Cascade)
+
+  @@map("bank_accounts")
+}
+
+// ============================================
+// KYC DOCUMENTS
+// ============================================
+
+model KycDocument {
+  id           String            @id @default(uuid())
+  entityType   EntityType        @map("entity_type")
+  buyerId      String?           @map("buyer_id")
+  sellerId     String?           @map("seller_id")
+  financierId  String?           @map("financier_id")
+  documentType KycDocumentType   @map("document_type")
+  documentUrl  String            @map("document_url")
+  fileName     String?           @map("file_name")
+  status       KycDocumentStatus @default(PENDING)
+  reviewedBy   String?           @map("reviewed_by")
+  reviewedAt   DateTime?         @map("reviewed_at")
+  rejectionReason String?        @map("rejection_reason")
+  createdAt    DateTime          @default(now()) @map("created_at")
+  updatedAt    DateTime          @updatedAt @map("updated_at")
+
+  buyer     Buyer?     @relation(fields: [buyerId], references: [id], onDelete: Cascade)
+  seller    Seller?    @relation(fields: [sellerId], references: [id], onDelete: Cascade)
+  financier Financier? @relation(fields: [financierId], references: [id], onDelete: Cascade)
+
+  @@map("kyc_documents")
+}
+
+// ============================================
+// INVOICES
+// ============================================
+
+model Invoice {
+  id                   String        @id @default(uuid())
+  invoiceNumber        String        @map("invoice_number")
+  invoiceDate          DateTime      @map("invoice_date")
+  dueDate              DateTime      @map("due_date")
+
+  // Seller details (from invoice)
+  sellerGstin          String?       @map("seller_gstin")
+  sellerName           String        @map("seller_name")
+
+  // Buyer details (from invoice)
+  buyerGstin           String?       @map("buyer_gstin")
+  buyerName            String        @map("buyer_name")
+
+  // Amounts
+  subtotal             Float
+  taxAmount            Float         @map("tax_amount")
+  totalAmount          Float         @map("total_amount")
+
+  // Upload metadata
+  uploadedByType       EntityType    @map("uploaded_by_type")
+  uploadedById         String        @map("uploaded_by_id")
+  buyerId              String?       @map("buyer_id")
+  sellerId             String?       @map("seller_id")
+
+  // Product type & status
+  productType          ProductType   @map("product_type")
+  status               InvoiceStatus @default(DRAFT)
+
+  // Document
+  documentUrl          String?       @map("document_url")
+  extractionConfidence Float?        @map("extraction_confidence")
+
+  createdAt            DateTime      @default(now()) @map("created_at")
+  updatedAt            DateTime      @updatedAt @map("updated_at")
+
+  // Relations
+  buyer          Buyer?          @relation("BuyerInvoices", fields: [buyerId], references: [id])
+  seller         Seller?         @relation("SellerInvoices", fields: [sellerId], references: [id])
+  discountOffer  DiscountOffer?
+  bids           Bid[]
+  disbursement   Disbursement?
+
+  @@unique([invoiceNumber, sellerGstin])
+  @@map("invoices")
+}
+
+// ============================================
+// DISCOUNT OFFERS (Dynamic Discounting)
+// ============================================
+
+model DiscountOffer {
+  id                 String              @id @default(uuid())
+  invoiceId          String              @unique @map("invoice_id")
+  buyerId            String              @map("buyer_id")
+  discountPercentage Float               @map("discount_percentage")
+  discountedAmount   Float               @map("discounted_amount")
+  earlyPaymentDate   DateTime            @map("early_payment_date")
+  fundingType        FundingType         @map("funding_type")
+  status             DiscountOfferStatus @default(PENDING)
+  respondedAt        DateTime?           @map("responded_at")
+  createdAt          DateTime            @default(now()) @map("created_at")
+  updatedAt          DateTime            @updatedAt @map("updated_at")
+
+  invoice Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  buyer   Buyer   @relation(fields: [buyerId], references: [id])
+
+  @@map("discount_offers")
+}
+
+// ============================================
+// BIDS (Financier Bidding)
+// ============================================
+
+model Bid {
+  id                String    @id @default(uuid())
+  invoiceId         String    @map("invoice_id")
+  financierId       String    @map("financier_id")
+  discountRate      Float     @map("discount_rate")      // Annual rate %
+  haircutPercentage Float     @default(0) @map("haircut_percentage")
+  processingFee     Float     @default(0) @map("processing_fee")
+  netAmount         Float     @map("net_amount")         // Amount seller receives
+  validUntil        DateTime  @map("valid_until")
+  status            BidStatus @default(PENDING)
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @updatedAt @map("updated_at")
+
+  invoice      Invoice       @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  financier    Financier     @relation(fields: [financierId], references: [id])
+  disbursement Disbursement?
+
+  @@map("bids")
+}
+
+// ============================================
+// DISBURSEMENTS
+// ============================================
+
+model Disbursement {
+  id              String             @id @default(uuid())
+  invoiceId       String             @unique @map("invoice_id")
+  bidId           String?            @unique @map("bid_id")
+  payerType       EntityType         @map("payer_type")
+  payerId         String             @map("payer_id")
+  financierId     String?            @map("financier_id")
+  recipientType   EntityType         @map("recipient_type")
+  recipientId     String             @map("recipient_id")
+  amount          Float
+  transactionRef  String?            @map("transaction_ref")
+  status          DisbursementStatus @default(PENDING)
+  disbursedAt     DateTime?          @map("disbursed_at")
+  createdAt       DateTime           @default(now()) @map("created_at")
+  updatedAt       DateTime           @updatedAt @map("updated_at")
+
+  invoice   Invoice    @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  bid       Bid?       @relation(fields: [bidId], references: [id])
+  financier Financier? @relation(fields: [financierId], references: [id])
+  repayment Repayment?
+
+  @@map("disbursements")
+}
+
+// ============================================
+// REPAYMENTS
+// ============================================
+
+model Repayment {
+  id             String          @id @default(uuid())
+  disbursementId String          @unique @map("disbursement_id")
+  dueDate        DateTime        @map("due_date")
+  amount         Float
+  payerType      EntityType      @map("payer_type")
+  payerId        String          @map("payer_id")
+  status         RepaymentStatus @default(PENDING)
+  paidAt         DateTime?       @map("paid_at")
+  createdAt      DateTime        @default(now()) @map("created_at")
+  updatedAt      DateTime        @updatedAt @map("updated_at")
+
+  disbursement Disbursement @relation(fields: [disbursementId], references: [id], onDelete: Cascade)
+
+  @@map("repayments")
+}
+
+// ============================================
+// NOTIFICATIONS
+// ============================================
+
+model Notification {
+  id        String           @id @default(uuid())
+  userId    String           @map("user_id")
+  type      NotificationType
+  title     String
+  message   String
+  data      String?          // JSON string for additional data
+  isRead    Boolean          @default(false) @map("is_read")
+  createdAt DateTime         @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("notifications")
+}
+
+// ============================================
+// AUDIT LOGS
+// ============================================
+
+model AuditLog {
+  id         String   @id @default(uuid())
+  userId     String?  @map("user_id")
+  action     String
+  entityType String   @map("entity_type")
+  entityId   String   @map("entity_id")
+  oldValues  String?  @map("old_values")  // JSON string
+  newValues  String?  @map("new_values")  // JSON string
+  ipAddress  String?  @map("ip_address")
+  userAgent  String?  @map("user_agent")
+  timestamp  DateTime @default(now())
+
+  user User? @relation(fields: [userId], references: [id])
+
+  @@map("audit_logs")
+}
+
+// ============================================
+// ENUMS
+// ============================================
+
+enum UserType {
+  BUYER
+  SELLER
+  FINANCIER
+  ADMIN
+}
+
+enum UserStatus {
+  PENDING
+  ACTIVE
+  SUSPENDED
+  DEACTIVATED
+}
+
+enum KycStatus {
+  PENDING
+  SUBMITTED
+  UNDER_REVIEW
+  APPROVED
+  REJECTED
+}
+
+enum KycDocumentType {
+  PAN_CARD
+  GST_CERTIFICATE
+  INCORPORATION_CERTIFICATE
+  BANK_STATEMENT
+  ADDRESS_PROOF
+  DIRECTOR_ID
+  RBI_LICENSE
+  CANCELLED_CHEQUE
+  OTHER
+}
+
+enum KycDocumentStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum EntityType {
+  BUYER
+  SELLER
+  FINANCIER
+}
+
+enum MappingStatus {
+  ACTIVE
+  INACTIVE
+}
+
+enum ProductType {
+  DYNAMIC_DISCOUNTING      // Self-funded by buyer
+  DD_EARLY_PAYMENT         // Financier-funded
+  GST_BACKED               // GST invoice financing
+}
+
+enum InvoiceStatus {
+  DRAFT
+  PENDING_ACCEPTANCE
+  ACCEPTED
+  REJECTED
+  OPEN_FOR_BIDDING
+  BID_SELECTED
+  DISBURSED
+  SETTLED
+  DISPUTED
+  CANCELLED
+}
+
+enum FundingType {
+  SELF_FUNDED
+  FINANCIER_FUNDED
+}
+
+enum DiscountOfferStatus {
+  PENDING
+  ACCEPTED
+  REJECTED
+  EXPIRED
+  CANCELLED
+}
+
+enum BidStatus {
+  PENDING
+  ACCEPTED
+  REJECTED
+  EXPIRED
+  WITHDRAWN
+}
+
+enum DisbursementStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
+enum RepaymentStatus {
+  PENDING
+  PAID
+  OVERDUE
+  DEFAULTED
+}
+
+enum NotificationType {
+  KYC_SUBMITTED
+  KYC_APPROVED
+  KYC_REJECTED
+  INVOICE_UPLOADED
+  DISCOUNT_OFFER_RECEIVED
+  DISCOUNT_ACCEPTED
+  DISCOUNT_REJECTED
+  BID_RECEIVED
+  BID_ACCEPTED
+  BID_REJECTED
+  FUNDS_DISBURSED
+  REPAYMENT_DUE
+  REPAYMENT_RECEIVED
+  SYSTEM_ALERT
+}
