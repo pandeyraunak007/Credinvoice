@@ -128,6 +128,38 @@ export const submitInvoice = asyncHandler(async (req: Request, res: Response) =>
   return sendSuccess(res, invoice, 'Invoice submitted successfully');
 });
 
+// Accept invoice
+export const acceptInvoice = asyncHandler(async (req: Request, res: Response) => {
+  if (!req.user) {
+    return sendError(res, 'Not authenticated', 401);
+  }
+
+  const { invoiceId } = req.params;
+  const invoice = await invoiceService.acceptInvoice(
+    invoiceId,
+    req.user.userId,
+    req.user.userType
+  );
+
+  return sendSuccess(res, invoice, 'Invoice accepted successfully');
+});
+
+// Open invoice for bidding
+export const openForBidding = asyncHandler(async (req: Request, res: Response) => {
+  if (!req.user) {
+    return sendError(res, 'Not authenticated', 401);
+  }
+
+  const { invoiceId } = req.params;
+  const invoice = await invoiceService.openForBidding(
+    invoiceId,
+    req.user.userId,
+    req.user.userType
+  );
+
+  return sendSuccess(res, invoice, 'Invoice opened for bidding');
+});
+
 // Get available invoices for bidding (financiers)
 export const getAvailableForBidding = asyncHandler(async (req: Request, res: Response) => {
   if (!req.user) {

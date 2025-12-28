@@ -299,6 +299,60 @@ export class InvoiceService {
     return updated;
   }
 
+  // Accept invoice (buyer accepts seller's invoice, or seller accepts buyer's invoice)
+  async acceptInvoice(invoiceId: string, userId: string, userType: UserType) {
+    const invoice = await this.getInvoice(invoiceId, userId, userType);
+
+    if (invoice.status !== 'PENDING_ACCEPTANCE') {
+      throw new AppError('Invoice is not pending acceptance', 400);
+    }
+
+    // The accepting party should be different from the uploader
+    const { entityId, entityType } = await this.getEntityInfo(userId, userType);
+
+    // Link the buyer/seller based on who's accepting
+    const updateData: any = { status: 'ACCEPTED' };
+
+    if (userType === 'BUYER' && !invoice.buyerId) {
+      updateData.buyerId = entityId;
+    } else if (userType === 'SELLER' && !invoice.sellerId) {
+      updateData.sellerId = entityId;
+    }
+
+    const updated = await prisma.invoice.update({
+      where: { id: invoiceId },
+      data: updateData,
+    });
+
+    return updated;
+  }
+
+  // Open invoice for bidding
+  async openForBidding(invoiceId: string, userId: string, userType: UserType) {
+    const invoice = await this.getInvoice(invoiceId, userId, userType);
+
+    if (invoice.status !== 'ACCEPTED') {
+      throw new AppError('Invoice must be accepted before opening for bidding', 400);
+    }
+
+    // Only the seller (or buyer for DD workflows) can open for bidding
+    const { entityId } = await this.getEntityInfo(userId, userType);
+    const canOpen =
+      (userType === 'SELLER' && invoice.sellerId === entityId) ||
+      (userType === 'BUYER' && invoice.buyerId === entityId);
+
+    if (!canOpen) {
+      throw new AppError('You cannot open this invoice for bidding', 403);
+    }
+
+    const updated = await prisma.invoice.update({
+      where: { id: invoiceId },
+      data: { status: 'OPEN_FOR_BIDDING' },
+    });
+
+    return updated;
+  }
+
   // Get invoices available for bidding (for financiers)
   async getAvailableForBidding(userId: string, query: { page: number; limit: number }) {
     const { entityId } = await this.getEntityInfo(userId, 'FINANCIER');

@@ -13,6 +13,8 @@ import {
   updateInvoice,
   deleteInvoice,
   submitInvoice,
+  acceptInvoice,
+  openForBidding,
   getAvailableForBidding,
 } from './invoice.controller';
 import { ALLOWED_FILE_TYPES, MAX_FILE_SIZE } from '../../config/constants';
@@ -79,5 +81,11 @@ router.delete('/:invoiceId', authorize('BUYER', 'SELLER'), deleteInvoice);
 
 // Submit invoice
 router.post('/:invoiceId/submit', authorize('BUYER', 'SELLER'), submitInvoice);
+
+// Accept invoice
+router.post('/:invoiceId/accept', authorize('BUYER', 'SELLER'), acceptInvoice);
+
+// Open for bidding
+router.post('/:invoiceId/open-for-bidding', authorize('BUYER', 'SELLER'), openForBidding);
 
 export default router;
