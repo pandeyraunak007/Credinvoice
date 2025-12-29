@@ -1,36 +1,115 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { 
-  Bell, TrendingUp, FileText, Clock, CheckCircle, XCircle, 
+import {
+  Bell, TrendingUp, FileText, Clock, CheckCircle, XCircle,
   IndianRupee, Calendar, Building2, ChevronRight, AlertCircle,
-  CreditCard, Wallet, History, HelpCircle, X,
+  CreditCard, Wallet, History, HelpCircle, X, Loader2,
   ThumbsUp, ThumbsDown, Timer, Percent, Info, Phone, Mail, Calculator
 } from 'lucide-react';
+import { discountService, invoiceService, disbursementService } from '../../services/api';
 
 // ============ SELLER DASHBOARD ============
 export function SellerDashboard() {
   const navigate = useNavigate();
-  
-  const stats = {
-    pendingOffers: 3,
-    pendingValue: 8.5,
-    activeFinancing: 5,
-    activeValue: 15.2,
-    receivedThisMonth: 23.4,
-    upcomingRepayments: 4.8
+  const [loading, setLoading] = useState(true);
+  const [pendingOffers, setPendingOffers] = useState([]);
+  const [recentPayments, setRecentPayments] = useState([]);
+  const [stats, setStats] = useState({
+    pendingOffers: 0,
+    pendingValue: 0,
+    activeFinancing: 0,
+    activeValue: 0,
+    receivedThisMonth: 0,
+    upcomingRepayments: 0
+  });
+
+  const fetchData = async () => {
+    try {
+      setLoading(true);
+      // Fetch pending discount offers for seller
+      const offersResponse = await discountService.getPending();
+      const offers = offersResponse.data || [];
+
+      // Transform offers to match component format
+      const transformedOffers = offers.map(offer => ({
+        id: offer.id,
+        buyer: offer.invoice?.buyerName || 'Unknown Buyer',
+        invoiceNumber: offer.invoice?.invoiceNumber || offer.invoiceId,
+        amount: offer.invoice?.totalAmount || 0,
+        discount: offer.discountPercentage || 0,
+        earlyDate: offer.earlyPaymentDate,
+        expiresIn: getExpiresIn(offer.expiresAt),
+        urgent: isUrgent(offer.expiresAt),
+      }));
+
+      setPendingOffers(transformedOffers);
+
+      // Calculate stats
+      const pendingValue = offers.reduce((sum, o) => sum + (o.invoice?.totalAmount || 0), 0) / 100000;
+
+      // Fetch disbursements for recent payments
+      const disbursementsResponse = await disbursementService.list();
+      const disbursements = disbursementsResponse.data || [];
+      const recentDisbursements = disbursements
+        .filter(d => d.status === 'COMPLETED')
+        .slice(0, 5)
+        .map(d => ({
+          id: d.id,
+          buyer: d.invoice?.buyerName || 'Unknown',
+          amount: d.amount || 0,
+          date: new Date(d.completedAt || d.createdAt).toLocaleDateString('en-IN', { month: 'short', day: 'numeric', year: 'numeric' }),
+          source: d.fundingType === 'SELF_FUNDED' ? 'Buyer Direct' : 'Financier',
+          financier: d.financier?.companyName || null,
+        }));
+
+      setRecentPayments(recentDisbursements);
+
+      setStats({
+        pendingOffers: offers.length,
+        pendingValue: pendingValue.toFixed(1),
+        activeFinancing: disbursements.filter(d => d.status === 'IN_PROGRESS').length,
+        activeValue: (disbursements.filter(d => d.status === 'IN_PROGRESS').reduce((sum, d) => sum + (d.amount || 0), 0) / 100000).toFixed(1),
+        receivedThisMonth: (recentDisbursements.reduce((sum, d) => sum + d.amount, 0) / 100000).toFixed(1),
+        upcomingRepayments: 0
+      });
+    } catch (error) {
+      console.error('Failed to fetch seller data:', error);
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const pendingOffers = [
-    { id: 1, buyer: 'Ansai Mart', invoiceNumber: 'INV-2024-0078', amount: 289100, discount: 2.0, earlyDate: '2025-01-15', expiresIn: '23h', urgent: false },
-    { id: 2, buyer: 'TechCorp India', invoiceNumber: 'INV-2024-0082', amount: 450000, discount: 1.8, earlyDate: '2025-01-20', expiresIn: '6h', urgent: true },
-    { id: 3, buyer: 'Retail Plus', invoiceNumber: 'INV-2024-0085', amount: 175000, discount: 2.5, earlyDate: '2025-01-18', expiresIn: '2d', urgent: false },
-  ];
+  useEffect(() => {
+    fetchData();
+  }, []);
 
-  const recentPayments = [
-    { id: 1, buyer: 'Ansai Mart', amount: 245000, date: 'Dec 27, 2024', source: 'Financier', financier: 'HDFC Bank' },
-    { id: 2, buyer: 'TechCorp India', amount: 380000, date: 'Dec 25, 2024', source: 'Buyer Direct', financier: null },
-    { id: 3, buyer: 'Global Traders', amount: 520000, date: 'Dec 22, 2024', source: 'Financier', financier: 'Urban Finance' },
-  ];
+  const getExpiresIn = (expiresAt) => {
+    if (!expiresAt) return '3d';
+    const expires = new Date(expiresAt);
+    const now = new Date();
+    const hoursLeft = Math.max(0, Math.ceil((expires - now) / (1000 * 60 * 60)));
+    if (hoursLeft < 24) return `${hoursLeft}h`;
+    return `${Math.ceil(hoursLeft / 24)}d`;
+  };
+
+  const isUrgent = (expiresAt) => {
+    if (!expiresAt) return false;
+    const expires = new Date(expiresAt);
+    const now = new Date();
+    const hoursLeft = Math.ceil((expires - now) / (1000 * 60 * 60));
+    return hoursLeft < 12;
+  };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="flex items-center space-x-2 text-gray-600">
+          <Loader2 className="animate-spin" size={24} />
+          <span>Loading dashboard...</span>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -248,23 +327,117 @@ export function SellerDashboard() {
 export function OfferDetailPage() {
   const navigate = useNavigate();
   const { id } = useParams();
+  const [loading, setLoading] = useState(true);
+  const [offer, setOffer] = useState(null);
   const [showAcceptModal, setShowAcceptModal] = useState(false);
   const [showRejectModal, setShowRejectModal] = useState(false);
   const [rejectReason, setRejectReason] = useState('');
+  const [processing, setProcessing] = useState(false);
 
-  const offer = {
-    id: id || 1,
-    buyer: { name: 'Ansai Mart', gstin: '27AABCU9603R1ZN', email: 'ap@ansaimart.com', phone: '+91 22 9876 5432', creditRating: 'AA', paymentHistory: '98% on-time' },
-    invoice: { number: 'INV-2024-0078', date: '2024-12-28', dueDate: '2025-02-28' },
-    amounts: { invoiceTotal: 289100 },
-    discount: { percent: 2.0, amount: 5782, netAmount: 283318, earlyPaymentDate: '2025-01-15', daysEarly: 44 },
-    hoursRemaining: 23,
-    createdAt: '2024-12-28 10:30 AM',
-    expiresAt: '2024-12-30 10:30 AM',
+  useEffect(() => {
+    const fetchOffer = async () => {
+      try {
+        setLoading(true);
+        const response = await discountService.getById(id);
+        const data = response.data;
+
+        // Transform API data to match component format
+        const invoice = data.invoice || {};
+        const discountAmount = ((invoice.totalAmount || 0) * (data.discountPercentage || 0)) / 100;
+        const netAmount = (invoice.totalAmount || 0) - discountAmount;
+        const dueDate = new Date(invoice.dueDate);
+        const earlyDate = new Date(data.earlyPaymentDate);
+        const daysEarly = Math.ceil((dueDate - earlyDate) / (1000 * 60 * 60 * 24));
+
+        setOffer({
+          id: data.id,
+          buyer: {
+            name: invoice.buyerName || 'Unknown Buyer',
+            gstin: invoice.buyerGstin || '',
+            email: data.buyer?.email || 'N/A',
+            phone: data.buyer?.phone || 'N/A',
+            creditRating: 'A',
+            paymentHistory: '95% on-time'
+          },
+          invoice: {
+            number: invoice.invoiceNumber,
+            date: new Date(invoice.invoiceDate).toLocaleDateString('en-IN'),
+            dueDate: new Date(invoice.dueDate).toLocaleDateString('en-IN')
+          },
+          amounts: { invoiceTotal: invoice.totalAmount || 0 },
+          discount: {
+            percent: data.discountPercentage || 0,
+            amount: discountAmount,
+            netAmount: netAmount,
+            earlyPaymentDate: new Date(data.earlyPaymentDate).toLocaleDateString('en-IN'),
+            daysEarly: daysEarly
+          },
+          hoursRemaining: Math.max(0, Math.ceil((new Date(data.expiresAt) - new Date()) / (1000 * 60 * 60))),
+          createdAt: new Date(data.createdAt).toLocaleString('en-IN'),
+          expiresAt: new Date(data.expiresAt).toLocaleString('en-IN'),
+        });
+      } catch (error) {
+        console.error('Failed to fetch offer:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    if (id) fetchOffer();
+  }, [id]);
+
+  const handleAccept = async () => {
+    setProcessing(true);
+    try {
+      await discountService.accept(id);
+      setShowAcceptModal(false);
+      navigate('/seller');
+    } catch (error) {
+      console.error('Failed to accept offer:', error);
+      alert(error.message || 'Failed to accept offer');
+    } finally {
+      setProcessing(false);
+    }
   };
 
-  const handleAccept = () => { setShowAcceptModal(false); alert('Offer accepted! You will receive payment by ' + offer.discount.earlyPaymentDate); navigate('/seller'); };
-  const handleReject = () => { setShowRejectModal(false); alert('Offer rejected.'); navigate('/seller'); };
+  const handleReject = async () => {
+    setProcessing(true);
+    try {
+      await discountService.reject(id);
+      setShowRejectModal(false);
+      navigate('/seller');
+    } catch (error) {
+      console.error('Failed to reject offer:', error);
+      alert(error.message || 'Failed to reject offer');
+    } finally {
+      setProcessing(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="flex items-center space-x-2 text-gray-600">
+          <Loader2 className="animate-spin" size={24} />
+          <span>Loading offer details...</span>
+        </div>
+      </div>
+    );
+  }
+
+  if (!offer) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <AlertCircle className="mx-auto text-red-500 mb-4" size={48} />
+          <p className="text-gray-600">Offer not found</p>
+          <button onClick={() => navigate('/seller')} className="mt-4 text-green-600 hover:underline">
+            Back to Dashboard
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -431,8 +604,10 @@ export function OfferDetailPage() {
                 <div className="border-t pt-2 flex justify-between font-semibold"><span>You'll Receive</span><span className="text-green-600">₹{offer.discount.netAmount.toLocaleString('en-IN')}</span></div>
               </div>
               <div className="flex items-center space-x-3">
-                <button onClick={() => setShowAcceptModal(false)} className="flex-1 px-4 py-3 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 font-medium">Cancel</button>
-                <button onClick={handleAccept} className="flex-1 px-4 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 font-medium">Yes, Accept</button>
+                <button onClick={() => setShowAcceptModal(false)} disabled={processing} className="flex-1 px-4 py-3 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 font-medium disabled:opacity-50">Cancel</button>
+                <button onClick={handleAccept} disabled={processing} className="flex-1 px-4 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 font-medium disabled:opacity-50 flex items-center justify-center">
+                  {processing ? <><Loader2 size={18} className="animate-spin mr-2" />Processing...</> : 'Yes, Accept'}
+                </button>
               </div>
             </div>
           </div>
@@ -454,8 +629,10 @@ export function OfferDetailPage() {
                 <textarea value={rejectReason} onChange={(e) => setRejectReason(e.target.value)} placeholder="e.g., Discount too high..." className="w-full px-3 py-2 border border-gray-300 rounded-lg" rows={3} />
               </div>
               <div className="flex items-center space-x-3">
-                <button onClick={() => setShowRejectModal(false)} className="flex-1 px-4 py-3 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 font-medium">Cancel</button>
-                <button onClick={handleReject} className="flex-1 px-4 py-3 bg-red-600 text-white rounded-lg hover:bg-red-700 font-medium">Reject</button>
+                <button onClick={() => setShowRejectModal(false)} disabled={processing} className="flex-1 px-4 py-3 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 font-medium disabled:opacity-50">Cancel</button>
+                <button onClick={handleReject} disabled={processing} className="flex-1 px-4 py-3 bg-red-600 text-white rounded-lg hover:bg-red-700 font-medium disabled:opacity-50 flex items-center justify-center">
+                  {processing ? <><Loader2 size={18} className="animate-spin mr-2" />Processing...</> : 'Reject'}
+                </button>
               </div>
             </div>
           </div>

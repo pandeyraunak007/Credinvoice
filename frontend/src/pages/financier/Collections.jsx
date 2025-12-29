@@ -1,9 +1,10 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { 
+import {
   ArrowLeft, Search, Building2, Calendar, Clock, CheckCircle, AlertCircle,
-  IndianRupee, Download, Phone, Mail, Bell, Filter, ChevronDown
+  IndianRupee, Download, Phone, Mail, Bell, Filter, ChevronDown, Loader2, RefreshCw
 } from 'lucide-react';
+import { disbursementService } from '../../services/api';
 
 const StatusBadge = ({ status, daysOverdue }) => {
   const config = {
@@ -24,66 +25,105 @@ const StatusBadge = ({ status, daysOverdue }) => {
 
 export default function Collections() {
   const navigate = useNavigate();
+  const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('upcoming');
   const [searchTerm, setSearchTerm] = useState('');
   const [showReminderModal, setShowReminderModal] = useState(false);
   const [selectedCollection, setSelectedCollection] = useState(null);
+  const [upcomingCollections, setUpcomingCollections] = useState([]);
+  const [recentCollections, setRecentCollections] = useState([]);
+  const [stats, setStats] = useState({
+    upcomingTotal: 0,
+    thisWeek: 0,
+    nextWeek: 0,
+    overdue: 0,
+    collectedThisMonth: 0
+  });
 
-  const stats = {
-    upcomingTotal: 1.85,
-    thisWeek: 0.89,
-    nextWeek: 0.61,
-    overdue: 0.185,
-    collectedThisMonth: 2.34
+  const fetchCollections = async () => {
+    try {
+      setLoading(true);
+      // Fetch upcoming repayments
+      const upcomingResponse = await disbursementService.getUpcomingRepayments();
+      const repayments = upcomingResponse.data || [];
+
+      // Fetch all disbursements for collected ones
+      const disbursementsResponse = await disbursementService.list();
+      const disbursements = disbursementsResponse.data || [];
+
+      // Transform upcoming repayments
+      const upcoming = repayments.map(r => {
+        const inv = r.invoice || {};
+        const dueDate = new Date(r.dueDate || inv.dueDate);
+        const now = new Date();
+        const daysLeft = Math.ceil((dueDate - now) / (1000 * 60 * 60 * 24));
+        const expectedReturn = (inv.totalAmount * (r.discountRate || 0)) / 100;
+
+        let status = 'on_track';
+        if (daysLeft < 0) status = 'overdue';
+        else if (daysLeft <= 3) status = 'due_soon';
+
+        return {
+          id: r.id,
+          invoiceId: inv.invoiceNumber || r.invoiceId,
+          buyer: inv.buyerName || 'Unknown Buyer',
+          buyerContact: 'Contact',
+          buyerPhone: r.buyer?.phone || '+91 XXXX XXXX',
+          buyerEmail: r.buyer?.email || 'contact@buyer.com',
+          amount: inv.totalAmount || 0,
+          dueDate: dueDate.toLocaleDateString('en-IN'),
+          daysLeft: Math.max(0, daysLeft),
+          status: status,
+          daysOverdue: daysLeft < 0 ? Math.abs(daysLeft) : 0,
+          myRate: r.discountRate || 0,
+          disbursedAmount: r.amount || 0,
+          expectedReturn: expectedReturn
+        };
+      });
+
+      // Transform collected disbursements
+      const collected = disbursements
+        .filter(d => d.status === 'COMPLETED')
+        .map(d => {
+          const inv = d.invoice || {};
+          const profit = (inv.totalAmount * (d.discountRate || 0)) / 100;
+          return {
+            id: d.id,
+            invoiceId: inv.invoiceNumber || d.invoiceId,
+            buyer: inv.buyerName || 'Unknown',
+            amount: inv.totalAmount || 0,
+            collectedDate: d.completedAt ? new Date(d.completedAt).toLocaleDateString('en-IN') : '-',
+            collectedAmount: inv.totalAmount || 0,
+            profit: profit,
+            daysEarly: 0
+          };
+        });
+
+      setUpcomingCollections(upcoming);
+      setRecentCollections(collected);
+
+      // Calculate stats
+      const now = new Date();
+      const oneWeek = 7 * 24 * 60 * 60 * 1000;
+      const twoWeeks = 14 * 24 * 60 * 60 * 1000;
+
+      setStats({
+        upcomingTotal: (upcoming.reduce((sum, c) => sum + c.amount, 0) / 10000000).toFixed(2),
+        thisWeek: (upcoming.filter(c => c.daysLeft <= 7).reduce((sum, c) => sum + c.amount, 0) / 10000000).toFixed(2),
+        nextWeek: (upcoming.filter(c => c.daysLeft > 7 && c.daysLeft <= 14).reduce((sum, c) => sum + c.amount, 0) / 10000000).toFixed(2),
+        overdue: (upcoming.filter(c => c.status === 'overdue').reduce((sum, c) => sum + c.amount, 0) / 10000000).toFixed(3),
+        collectedThisMonth: (collected.reduce((sum, c) => sum + c.collectedAmount, 0) / 10000000).toFixed(2)
+      });
+    } catch (error) {
+      console.error('Failed to fetch collections:', error);
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const upcomingCollections = [
-    {
-      id: 1, invoiceId: 'INV-2024-0058', buyer: 'Metro Supplies', buyerContact: 'Arun Kumar',
-      buyerPhone: '+91 98765 43210', buyerEmail: 'arun@metrosupplies.in',
-      amount: 185000, dueDate: '2024-12-28', daysLeft: 0, status: 'overdue', daysOverdue: 2,
-      myRate: 2.0, disbursedAmount: 181300, expectedReturn: 3700
-    },
-    {
-      id: 2, invoiceId: 'INV-2024-0062', buyer: 'Global Traders', buyerContact: 'Priya Sharma',
-      buyerPhone: '+91 87654 32109', buyerEmail: 'priya@globaltraders.in',
-      amount: 425000, dueDate: '2025-01-08', daysLeft: 11, status: 'due_soon',
-      myRate: 1.7, disbursedAmount: 417675, expectedReturn: 7325
-    },
-    {
-      id: 3, invoiceId: 'INV-2024-0065', buyer: 'Ansai Mart', buyerContact: 'Amit Verma',
-      buyerPhone: '+91 76543 21098', buyerEmail: 'amit@ansaimart.in',
-      amount: 500000, dueDate: '2025-01-15', daysLeft: 18, status: 'on_track',
-      myRate: 1.5, disbursedAmount: 491250, expectedReturn: 8750
-    },
-    {
-      id: 4, invoiceId: 'INV-2024-0068', buyer: 'TechCorp India', buyerContact: 'Rahul Mehta',
-      buyerPhone: '+91 65432 10987', buyerEmail: 'rahul@techcorp.in',
-      amount: 380000, dueDate: '2025-01-25', daysLeft: 28, status: 'on_track',
-      myRate: 1.6, disbursedAmount: 373960, expectedReturn: 6080
-    },
-    {
-      id: 5, invoiceId: 'INV-2024-0070', buyer: 'Retail Plus', buyerContact: 'Sneha Patel',
-      buyerPhone: '+91 54321 09876', buyerEmail: 'sneha@retailplus.in',
-      amount: 280000, dueDate: '2025-02-05', daysLeft: 39, status: 'on_track',
-      myRate: 1.8, disbursedAmount: 274960, expectedReturn: 5040
-    },
-  ];
-
-  const recentCollections = [
-    {
-      id: 1, invoiceId: 'INV-2024-0055', buyer: 'Retail Plus', amount: 320000,
-      collectedDate: '2024-12-26', collectedAmount: 320000, profit: 5440, daysEarly: 2
-    },
-    {
-      id: 2, invoiceId: 'INV-2024-0052', buyer: 'TechCorp India', amount: 450000,
-      collectedDate: '2024-12-24', collectedAmount: 450000, profit: 7650, daysEarly: 0
-    },
-    {
-      id: 3, invoiceId: 'INV-2024-0048', buyer: 'Global Traders', amount: 280000,
-      collectedDate: '2024-12-22', collectedAmount: 280000, profit: 4760, daysEarly: 1
-    },
-  ];
+  useEffect(() => {
+    fetchCollections();
+  }, []);
 
   const handleSendReminder = (collection) => {
     setSelectedCollection(collection);
@@ -96,10 +136,31 @@ export default function Collections() {
     alert(`Reminder sent to ${selectedCollection?.buyer}`);
   };
 
-  const filteredUpcoming = upcomingCollections.filter(c => 
+  const handleMarkPaid = async (repaymentId) => {
+    try {
+      await disbursementService.markRepaymentPaid(repaymentId);
+      fetchCollections();
+    } catch (error) {
+      console.error('Failed to mark as paid:', error);
+      alert(error.message || 'Failed to mark as paid');
+    }
+  };
+
+  const filteredUpcoming = upcomingCollections.filter(c =>
     !searchTerm || c.buyer.toLowerCase().includes(searchTerm.toLowerCase()) ||
     c.invoiceId.toLowerCase().includes(searchTerm.toLowerCase())
   );
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="flex items-center space-x-2 text-gray-600">
+          <Loader2 className="animate-spin" size={24} />
+          <span>Loading collections...</span>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -256,7 +317,10 @@ export default function Collections() {
                         <button className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm font-medium hover:bg-gray-50">
                           Contact Buyer
                         </button>
-                        <button className="px-3 py-1.5 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700">
+                        <button
+                          onClick={() => handleMarkPaid(collection.id)}
+                          className="px-3 py-1.5 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700"
+                        >
                           Mark Collected
                         </button>
                       </div>

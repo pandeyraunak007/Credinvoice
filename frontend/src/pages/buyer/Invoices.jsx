@@ -1,50 +1,64 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { 
-  Search, Filter, Download, Plus, FileText, Clock, CheckCircle, 
+import {
+  Search, Filter, Download, Plus, FileText, Clock, CheckCircle,
   XCircle, AlertCircle, ChevronRight, ChevronDown, MoreVertical,
   Eye, Edit, Trash2, Send, CreditCard, Building2, Calendar,
-  ArrowUpDown, RefreshCw, ArrowLeft
+  ArrowUpDown, RefreshCw, ArrowLeft, Loader2
 } from 'lucide-react';
+import { invoiceService } from '../../services/api';
 
 const statusConfig = {
-  draft: { label: 'Draft', color: 'bg-gray-100 text-gray-700', icon: FileText },
-  pending_acceptance: { label: 'Pending Acceptance', color: 'bg-yellow-100 text-yellow-700', icon: Clock },
-  accepted: { label: 'Accepted', color: 'bg-blue-100 text-blue-700', icon: CheckCircle },
-  open_for_bidding: { label: 'Open for Bidding', color: 'bg-purple-100 text-purple-700', icon: CreditCard },
-  bid_selected: { label: 'Bid Selected', color: 'bg-indigo-100 text-indigo-700', icon: CheckCircle },
-  disbursed: { label: 'Disbursed', color: 'bg-green-100 text-green-700', icon: CheckCircle },
-  settled: { label: 'Settled', color: 'bg-emerald-100 text-emerald-700', icon: CheckCircle },
-  rejected: { label: 'Rejected', color: 'bg-red-100 text-red-700', icon: XCircle },
+  DRAFT: { label: 'Draft', color: 'bg-gray-100 text-gray-700', icon: FileText },
+  PENDING_ACCEPTANCE: { label: 'Pending Acceptance', color: 'bg-yellow-100 text-yellow-700', icon: Clock },
+  ACCEPTED: { label: 'Accepted', color: 'bg-blue-100 text-blue-700', icon: CheckCircle },
+  OPEN_FOR_BIDDING: { label: 'Open for Bidding', color: 'bg-purple-100 text-purple-700', icon: CreditCard },
+  BID_ACCEPTED: { label: 'Bid Selected', color: 'bg-indigo-100 text-indigo-700', icon: CheckCircle },
+  DISBURSED: { label: 'Disbursed', color: 'bg-green-100 text-green-700', icon: CheckCircle },
+  SETTLED: { label: 'Settled', color: 'bg-emerald-100 text-emerald-700', icon: CheckCircle },
+  REJECTED: { label: 'Rejected', color: 'bg-red-100 text-red-700', icon: XCircle },
+  OVERDUE: { label: 'Overdue', color: 'bg-red-100 text-red-700', icon: AlertCircle },
 };
-
-const mockInvoices = [
-  { id: 'INV-2024-0077', seller: 'Kumar Textiles Pvt Ltd', sellerGstin: '27AABCU9603R1ZM', amount: 250000, discount: 2.0, status: 'pending_acceptance', date: '2024-12-28', dueDate: '2025-02-28', daysRemaining: 3 },
-  { id: 'INV-2024-0076', seller: 'Steel Corp India', sellerGstin: '29GGGGG1314R9Z6', amount: 500000, discount: 1.8, status: 'open_for_bidding', date: '2024-12-27', dueDate: '2025-02-27', bidsCount: 4 },
-  { id: 'INV-2024-0075', seller: 'Auto Parts Ltd', sellerGstin: '33AABCT1332L1ZZ', amount: 125000, discount: 2.5, status: 'accepted', date: '2024-12-26', dueDate: '2025-02-26' },
-  { id: 'INV-2024-0074', seller: 'Fabric House', sellerGstin: '27AAAAA0000A1Z5', amount: 310000, discount: 1.5, status: 'disbursed', date: '2024-12-25', dueDate: '2025-02-25', fundingType: 'Financier', financier: 'Urban Finance' },
-  { id: 'INV-2024-0073', seller: 'Metal Works Co', sellerGstin: '24AAAAA1111A1Z5', amount: 180000, discount: 2.0, status: 'settled', date: '2024-12-20', dueDate: '2025-01-20', fundingType: 'Self-Funded' },
-  { id: 'INV-2024-0072', seller: 'Plastic Industries', sellerGstin: '27BBBBB2222B1Z5', amount: 95000, discount: 2.2, status: 'rejected', date: '2024-12-18', dueDate: '2025-02-18' },
-  { id: 'INV-2024-0071', seller: 'Kumar Textiles Pvt Ltd', sellerGstin: '27AABCU9603R1ZM', amount: 420000, discount: 1.8, status: 'bid_selected', date: '2024-12-15', dueDate: '2025-02-15', selectedBid: { financier: 'HDFC Bank', rate: 1.6 } },
-  { id: 'INV-2024-0070', seller: 'Electronics Hub', sellerGstin: '29CCCCC3333C1Z5', amount: 275000, discount: null, status: 'draft', date: '2024-12-14', dueDate: '2025-02-14' },
-];
 
 export default function InvoicesPage() {
   const navigate = useNavigate();
+  const [invoices, setInvoices] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [sellerFilter, setSellerFilter] = useState('all');
   const [showFilters, setShowFilters] = useState(false);
   const [selectedInvoices, setSelectedInvoices] = useState([]);
 
-  const uniqueSellers = [...new Set(mockInvoices.map(inv => inv.seller))];
+  const fetchInvoices = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const response = await invoiceService.list();
+      setInvoices(response.data || []);
+    } catch (err) {
+      console.error('Failed to fetch invoices:', err);
+      setError(err.message || 'Failed to load invoices');
+    } finally {
+      setLoading(false);
+    }
+  };
 
-  const filteredInvoices = mockInvoices
+  useEffect(() => {
+    fetchInvoices();
+  }, []);
+
+  const uniqueSellers = [...new Set(invoices.map(inv => inv.sellerName).filter(Boolean))];
+
+  const filteredInvoices = invoices
     .filter(inv => {
       if (statusFilter !== 'all' && inv.status !== statusFilter) return false;
-      if (sellerFilter !== 'all' && inv.seller !== sellerFilter) return false;
-      if (searchTerm && !inv.id.toLowerCase().includes(searchTerm.toLowerCase()) && 
-          !inv.seller.toLowerCase().includes(searchTerm.toLowerCase())) return false;
+      if (sellerFilter !== 'all' && inv.sellerName !== sellerFilter) return false;
+      const searchLower = searchTerm.toLowerCase();
+      if (searchTerm &&
+          !inv.invoiceNumber?.toLowerCase().includes(searchLower) &&
+          !inv.sellerName?.toLowerCase().includes(searchLower)) return false;
       return true;
     });
 
@@ -53,53 +67,111 @@ export default function InvoicesPage() {
     return `₹${amount.toLocaleString('en-IN')}`;
   };
 
+  const getDaysRemaining = (dueDate) => {
+    if (!dueDate) return null;
+    const due = new Date(dueDate);
+    const now = new Date();
+    const diff = Math.ceil((due - now) / (1000 * 60 * 60 * 24));
+    return diff;
+  };
+
+  const handleSubmitInvoice = async (e, invoiceId) => {
+    e.stopPropagation();
+    try {
+      await invoiceService.submit(invoiceId);
+      fetchInvoices();
+    } catch (err) {
+      console.error('Failed to submit invoice:', err);
+    }
+  };
+
+  const handleOpenForBidding = async (e, invoiceId) => {
+    e.stopPropagation();
+    try {
+      await invoiceService.openForBidding(invoiceId);
+      fetchInvoices();
+    } catch (err) {
+      console.error('Failed to open for bidding:', err);
+    }
+  };
+
   const getActionButtons = (invoice) => {
     switch (invoice.status) {
-      case 'draft':
+      case 'DRAFT':
         return (
           <div className="flex items-center space-x-2">
-            <button className="text-blue-600 hover:text-blue-700 text-sm font-medium">Edit</button>
-            <button className="text-green-600 hover:text-green-700 text-sm font-medium">Submit</button>
+            <button
+              onClick={(e) => { e.stopPropagation(); navigate(`/invoices/${invoice.id}/edit`); }}
+              className="text-blue-600 hover:text-blue-700 text-sm font-medium"
+            >
+              Edit
+            </button>
+            <button
+              onClick={(e) => handleSubmitInvoice(e, invoice.id)}
+              className="text-green-600 hover:text-green-700 text-sm font-medium"
+            >
+              Submit
+            </button>
           </div>
         );
-      case 'pending_acceptance':
+      case 'PENDING_ACCEPTANCE':
+        const daysRemaining = getDaysRemaining(invoice.dueDate);
         return (
           <div className="flex items-center space-x-2">
-            <span className="text-orange-600 text-sm">{invoice.daysRemaining}d remaining</span>
+            <span className="text-orange-600 text-sm">
+              {daysRemaining > 0 ? `${daysRemaining}d remaining` : 'Awaiting response'}
+            </span>
           </div>
         );
-      case 'accepted':
+      case 'ACCEPTED':
         return (
-          <button 
-            onClick={(e) => { e.stopPropagation(); navigate(`/invoices/${invoice.id}`); }}
-            className="bg-blue-600 text-white px-3 py-1 rounded-lg text-sm hover:bg-blue-700"
-          >
-            Choose Funding
-          </button>
+          <div className="flex items-center space-x-2">
+            <button
+              onClick={(e) => handleOpenForBidding(e, invoice.id)}
+              className="bg-purple-600 text-white px-3 py-1 rounded-lg text-sm hover:bg-purple-700"
+            >
+              Open Bidding
+            </button>
+            <button
+              onClick={(e) => { e.stopPropagation(); navigate(`/invoices/${invoice.id}`); }}
+              className="bg-blue-600 text-white px-3 py-1 rounded-lg text-sm hover:bg-blue-700"
+            >
+              Self-Fund
+            </button>
+          </div>
         );
-      case 'open_for_bidding':
+      case 'OPEN_FOR_BIDDING':
+        const bidsCount = invoice.bids?.length || 0;
         return (
-          <button 
+          <button
             onClick={(e) => { e.stopPropagation(); navigate(`/invoices/${invoice.id}/bids`); }}
             className="bg-purple-600 text-white px-3 py-1 rounded-lg text-sm hover:bg-purple-700 flex items-center space-x-1"
           >
             <span>View Bids</span>
-            <span className="bg-white/20 px-1.5 rounded">{invoice.bidsCount}</span>
+            {bidsCount > 0 && <span className="bg-white/20 px-1.5 rounded">{bidsCount}</span>}
           </button>
         );
-      case 'bid_selected':
+      case 'BID_ACCEPTED':
+        const acceptedBid = invoice.bids?.find(b => b.status === 'ACCEPTED');
         return (
           <div className="text-sm">
             <span className="text-gray-500">Selected: </span>
-            <span className="font-medium text-gray-800">{invoice.selectedBid?.financier} @ {invoice.selectedBid?.rate}%</span>
+            <span className="font-medium text-gray-800">
+              {acceptedBid?.financier?.companyName || 'Financier'} @ {acceptedBid?.discountRate || '-'}%
+            </span>
           </div>
         );
-      case 'disbursed':
+      case 'DISBURSED':
         return (
           <div className="text-sm">
-            <span className="text-green-600 font-medium">{invoice.fundingType}</span>
-            {invoice.financier && <span className="text-gray-500"> via {invoice.financier}</span>}
+            <span className="text-green-600 font-medium">
+              {invoice.productType === 'DD_SELF_FUNDED' ? 'Self-Funded' : 'Financier'}
+            </span>
           </div>
+        );
+      case 'SETTLED':
+        return (
+          <div className="text-sm text-emerald-600 font-medium">Completed</div>
         );
       default:
         return null;
@@ -107,11 +179,45 @@ export default function InvoicesPage() {
   };
 
   const stats = {
-    total: mockInvoices.length,
-    pending: mockInvoices.filter(i => i.status === 'pending_acceptance').length,
-    bidding: mockInvoices.filter(i => i.status === 'open_for_bidding').length,
-    value: mockInvoices.reduce((sum, i) => sum + i.amount, 0),
+    total: invoices.length,
+    pending: invoices.filter(i => i.status === 'PENDING_ACCEPTANCE').length,
+    bidding: invoices.filter(i => i.status === 'OPEN_FOR_BIDDING').length,
+    value: invoices.reduce((sum, i) => sum + (i.totalAmount || 0), 0),
   };
+
+  const formatDate = (dateStr) => {
+    if (!dateStr) return '-';
+    return new Date(dateStr).toLocaleDateString('en-IN');
+  };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="flex items-center space-x-2 text-gray-600">
+          <Loader2 className="animate-spin" size={24} />
+          <span>Loading invoices...</span>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="bg-white p-8 rounded-xl shadow-sm text-center">
+          <AlertCircle className="mx-auto text-red-500 mb-4" size={48} />
+          <h2 className="text-xl font-semibold text-gray-800 mb-2">Error Loading Invoices</h2>
+          <p className="text-gray-600 mb-4">{error}</p>
+          <button
+            onClick={fetchInvoices}
+            className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700"
+          >
+            Try Again
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -204,9 +310,12 @@ export default function InvoicesPage() {
 
           <div className="px-4 py-3 bg-gray-50 flex items-center justify-between">
             <span className="text-sm text-gray-600">
-              Showing <strong>{filteredInvoices.length}</strong> of {mockInvoices.length} invoices
+              Showing <strong>{filteredInvoices.length}</strong> of {invoices.length} invoices
             </span>
-            <button className="flex items-center space-x-1 text-sm text-gray-600 hover:text-gray-800">
+            <button
+              onClick={fetchInvoices}
+              className="flex items-center space-x-1 text-sm text-gray-600 hover:text-gray-800"
+            >
               <RefreshCw size={14} />
               <span>Refresh</span>
             </button>
@@ -230,60 +339,79 @@ export default function InvoicesPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-                {filteredInvoices.map((invoice) => {
-                  const StatusIcon = statusConfig[invoice.status]?.icon || FileText;
-                  return (
-                    <tr 
-                      key={invoice.id} 
-                      onClick={() => navigate(`/invoices/${invoice.id}`)}
-                      className="hover:bg-gray-50 transition cursor-pointer"
-                    >
-                      <td className="px-4 py-4" onClick={(e) => e.stopPropagation()}>
-                        <input type="checkbox" className="rounded border-gray-300" />
-                      </td>
-                      <td className="px-4 py-4">
-                        <div>
-                          <p className="font-medium text-gray-800">{invoice.id}</p>
-                          <p className="text-sm text-gray-500">{invoice.date}</p>
-                        </div>
-                      </td>
-                      <td className="px-4 py-4">
-                        <div>
-                          <p className="font-medium text-gray-800">{invoice.seller}</p>
-                          <p className="text-sm text-gray-500 font-mono">{invoice.sellerGstin}</p>
-                        </div>
-                      </td>
-                      <td className="px-4 py-4">
-                        <p className="font-semibold text-gray-800">{formatCurrency(invoice.amount)}</p>
-                      </td>
-                      <td className="px-4 py-4">
-                        {invoice.discount ? (
+                {filteredInvoices.length === 0 ? (
+                  <tr>
+                    <td colSpan="8" className="px-4 py-12 text-center">
+                      <FileText className="mx-auto text-gray-400 mb-4" size={48} />
+                      <p className="text-gray-600 font-medium">No invoices found</p>
+                      <p className="text-gray-500 text-sm mt-1">Create your first invoice to get started</p>
+                      <button
+                        onClick={() => navigate('/invoices/create')}
+                        className="mt-4 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700"
+                      >
+                        Create Invoice
+                      </button>
+                    </td>
+                  </tr>
+                ) : (
+                  filteredInvoices.map((invoice) => {
+                    const StatusIcon = statusConfig[invoice.status]?.icon || FileText;
+                    const statusStyle = statusConfig[invoice.status] || statusConfig.DRAFT;
+                    return (
+                      <tr
+                        key={invoice.id}
+                        onClick={() => navigate(`/invoices/${invoice.id}`)}
+                        className="hover:bg-gray-50 transition cursor-pointer"
+                      >
+                        <td className="px-4 py-4" onClick={(e) => e.stopPropagation()}>
+                          <input type="checkbox" className="rounded border-gray-300" />
+                        </td>
+                        <td className="px-4 py-4">
                           <div>
-                            <p className="font-medium text-green-600">{invoice.discount}%</p>
-                            <p className="text-sm text-gray-500">-{formatCurrency(invoice.amount * invoice.discount / 100)}</p>
+                            <p className="font-medium text-gray-800">{invoice.invoiceNumber}</p>
+                            <p className="text-sm text-gray-500">{formatDate(invoice.invoiceDate)}</p>
                           </div>
-                        ) : (
-                          <span className="text-gray-400">Not set</span>
-                        )}
-                      </td>
-                      <td className="px-4 py-4">
-                        <div className="flex items-center space-x-1">
-                          <Calendar size={14} className="text-gray-400" />
-                          <span className="text-gray-700">{invoice.dueDate}</span>
-                        </div>
-                      </td>
-                      <td className="px-4 py-4">
-                        <span className={`inline-flex items-center space-x-1 px-2.5 py-1 rounded-full text-xs font-medium ${statusConfig[invoice.status]?.color}`}>
-                          <StatusIcon size={12} />
-                          <span>{statusConfig[invoice.status]?.label}</span>
-                        </span>
-                      </td>
-                      <td className="px-4 py-4" onClick={(e) => e.stopPropagation()}>
-                        {getActionButtons(invoice)}
-                      </td>
-                    </tr>
-                  );
-                })}
+                        </td>
+                        <td className="px-4 py-4">
+                          <div>
+                            <p className="font-medium text-gray-800">{invoice.sellerName || 'N/A'}</p>
+                            <p className="text-sm text-gray-500 font-mono">{invoice.sellerGstin}</p>
+                          </div>
+                        </td>
+                        <td className="px-4 py-4">
+                          <p className="font-semibold text-gray-800">{formatCurrency(invoice.totalAmount)}</p>
+                        </td>
+                        <td className="px-4 py-4">
+                          {invoice.discountPercentage ? (
+                            <div>
+                              <p className="font-medium text-green-600">{invoice.discountPercentage}%</p>
+                              <p className="text-sm text-gray-500">
+                                -{formatCurrency(invoice.totalAmount * invoice.discountPercentage / 100)}
+                              </p>
+                            </div>
+                          ) : (
+                            <span className="text-gray-400">Not set</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-4">
+                          <div className="flex items-center space-x-1">
+                            <Calendar size={14} className="text-gray-400" />
+                            <span className="text-gray-700">{formatDate(invoice.dueDate)}</span>
+                          </div>
+                        </td>
+                        <td className="px-4 py-4">
+                          <span className={`inline-flex items-center space-x-1 px-2.5 py-1 rounded-full text-xs font-medium ${statusStyle.color}`}>
+                            <StatusIcon size={12} />
+                            <span>{statusStyle.label}</span>
+                          </span>
+                        </td>
+                        <td className="px-4 py-4" onClick={(e) => e.stopPropagation()}>
+                          {getActionButtons(invoice)}
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
               </tbody>
             </table>
           </div>

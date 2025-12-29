@@ -1,10 +1,11 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { 
+import {
   ArrowLeft, Search, Filter, Building2, Calendar, Clock, Star,
-  ChevronDown, ChevronUp, TrendingUp, Shield, AlertCircle, 
-  IndianRupee, Target, RefreshCw, SlidersHorizontal, X, Check
+  ChevronDown, ChevronUp, TrendingUp, Shield, AlertCircle,
+  IndianRupee, Target, RefreshCw, SlidersHorizontal, X, Check, Loader2
 } from 'lucide-react';
+import { invoiceService, bidService } from '../../services/api';
 
 const RatingBadge = ({ rating }) => {
   const config = {
@@ -184,6 +185,9 @@ const InvoiceCard = ({ invoice, onPlaceBid }) => {
 
 export default function Marketplace() {
   const navigate = useNavigate();
+  const [invoices, setInvoices] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [showFilters, setShowFilters] = useState(false);
   const [filters, setFilters] = useState({
@@ -196,54 +200,80 @@ export default function Marketplace() {
   const [showBidModal, setShowBidModal] = useState(false);
   const [selectedInvoice, setSelectedInvoice] = useState(null);
   const [bidData, setBidData] = useState({ rate: '', processingFee: '0.25' });
+  const [submittingBid, setSubmittingBid] = useState(false);
+  const [myBids, setMyBids] = useState([]);
 
-  const invoices = [
-    {
-      id: 1, invoiceId: 'INV-2024-0076', buyer: 'Ansai Mart', buyerRating: 'AA', buyerGstin: '27AABCU9603R1ZN',
-      seller: 'Steel Corp India', sellerGstin: '29GGGGG1314R9Z6', amount: 500000, expectedRate: '1.5-2.0%',
-      tenure: 43, dueDate: 'Feb 27', invoiceDate: 'Dec 27', productType: 'DD + Early Payment',
-      discountOffered: 1.8, bidsCount: 4, lowestBid: 1.5, expiresIn: '16h', expiresInHours: 16,
-      buyerHistory: 45, onTimeRate: 98, creditLimit: 5, utilization: 65, avgPaymentDays: 2,
-      estYield: 12.7, sector: 'Manufacturing'
-    },
-    {
-      id: 2, invoiceId: 'INV-2024-0080', buyer: 'TechCorp India', buyerRating: 'A+', buyerGstin: '29AABCT5678P1ZQ',
-      seller: 'Kumar Textiles', sellerGstin: '27AABCU9603R1ZM', amount: 750000, expectedRate: '1.8-2.2%',
-      tenure: 58, dueDate: 'Mar 15', invoiceDate: 'Dec 26', productType: 'DD + Early Payment',
-      discountOffered: 2.0, bidsCount: 2, lowestBid: 1.9, expiresIn: '1d 4h', expiresInHours: 28,
-      buyerHistory: 32, onTimeRate: 95, creditLimit: 8, utilization: 48, avgPaymentDays: 1,
-      estYield: 11.3, sector: 'Technology'
-    },
-    {
-      id: 3, invoiceId: 'INV-2024-0081', buyer: 'Retail Plus', buyerRating: 'A', buyerGstin: '33AABCR1234M1ZR',
-      seller: 'Auto Parts Ltd', sellerGstin: '33AABCT1332L1ZZ', amount: 320000, expectedRate: '2.0-2.5%',
-      tenure: 35, dueDate: 'Feb 20', invoiceDate: 'Dec 28', productType: 'DD + Early Payment',
-      discountOffered: 2.2, bidsCount: 1, lowestBid: 2.1, expiresIn: '2d', expiresInHours: 48,
-      buyerHistory: 28, onTimeRate: 92, creditLimit: 3, utilization: 72, avgPaymentDays: 3,
-      estYield: 15.4, sector: 'Retail'
-    },
-    {
-      id: 4, invoiceId: 'INV-2024-0082', buyer: 'Global Traders', buyerRating: 'AA', buyerGstin: '27AABCG9876T1ZS',
-      seller: 'Fabric House', sellerGstin: '27AAAAA0000A1Z5', amount: 425000, expectedRate: '1.6-2.0%',
-      tenure: 50, dueDate: 'Mar 05', invoiceDate: 'Dec 25', productType: 'DD + Early Payment',
-      discountOffered: 1.8, bidsCount: 3, lowestBid: 1.7, expiresIn: '8h', expiresInHours: 8,
-      buyerHistory: 67, onTimeRate: 99, creditLimit: 6, utilization: 55, avgPaymentDays: 0,
-      estYield: 11.7, sector: 'Manufacturing'
-    },
-    {
-      id: 5, invoiceId: 'INV-2024-0083', buyer: 'Metro Supplies', buyerRating: 'A', buyerGstin: '29AABCM4567N1ZT',
-      seller: 'Plastic Industries', sellerGstin: '27BBBBB2222B1Z5', amount: 185000, expectedRate: '2.2-2.8%',
-      tenure: 40, dueDate: 'Feb 25', invoiceDate: 'Dec 28', productType: 'DD + Early Payment',
-      discountOffered: 2.5, bidsCount: 0, lowestBid: null, expiresIn: '3d', expiresInHours: 72,
-      buyerHistory: 15, onTimeRate: 88, creditLimit: 2, utilization: 80, avgPaymentDays: 5,
-      estYield: 18.2, sector: 'Retail'
-    },
-  ];
+  const fetchInvoices = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const response = await invoiceService.getAvailable();
+      // Transform API data to match component's expected format
+      const transformedInvoices = (response.data || []).map(inv => ({
+        id: inv.id,
+        invoiceId: inv.invoiceNumber || inv.id,
+        buyer: inv.buyerName || 'Unknown Buyer',
+        buyerRating: 'A', // Default rating, can be enhanced later
+        buyerGstin: inv.buyerGstin || '',
+        seller: inv.sellerName || 'Unknown Seller',
+        sellerGstin: inv.sellerGstin || '',
+        amount: inv.totalAmount || 0,
+        expectedRate: `${(inv.discountPercentage || 2) - 0.5}-${(inv.discountPercentage || 2) + 0.5}%`,
+        tenure: Math.ceil((new Date(inv.dueDate) - new Date()) / (1000 * 60 * 60 * 24)),
+        dueDate: new Date(inv.dueDate).toLocaleDateString('en-IN', { month: 'short', day: 'numeric' }),
+        invoiceDate: new Date(inv.invoiceDate).toLocaleDateString('en-IN', { month: 'short', day: 'numeric' }),
+        productType: inv.productType === 'DD_EARLY_PAYMENT' ? 'DD + Early Payment' : 'GST Financing',
+        discountOffered: inv.discountPercentage || 0,
+        bidsCount: inv.bids?.length || 0,
+        lowestBid: inv.bids?.length > 0 ? Math.min(...inv.bids.map(b => b.discountRate)) : null,
+        expiresIn: getExpiresIn(inv.createdAt),
+        expiresInHours: Math.ceil((new Date(inv.dueDate) - new Date()) / (1000 * 60 * 60)),
+        estYield: calculateYield(inv.discountPercentage || 2, inv.dueDate),
+        sector: 'General',
+      }));
+      setInvoices(transformedInvoices);
+    } catch (err) {
+      console.error('Failed to fetch invoices:', err);
+      setError(err.message || 'Failed to load invoices');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchMyBids = async () => {
+    try {
+      const response = await bidService.getMyBids();
+      setMyBids(response.data || []);
+    } catch (err) {
+      console.error('Failed to fetch my bids:', err);
+    }
+  };
+
+  useEffect(() => {
+    fetchInvoices();
+    fetchMyBids();
+  }, []);
+
+  const getExpiresIn = (createdAt) => {
+    if (!createdAt) return '3d';
+    const created = new Date(createdAt);
+    const expires = new Date(created.getTime() + 7 * 24 * 60 * 60 * 1000); // 7 days from creation
+    const now = new Date();
+    const hoursLeft = Math.max(0, Math.ceil((expires - now) / (1000 * 60 * 60)));
+    if (hoursLeft < 24) return `${hoursLeft}h`;
+    return `${Math.ceil(hoursLeft / 24)}d`;
+  };
+
+  const calculateYield = (discountRate, dueDate) => {
+    const days = Math.max(1, Math.ceil((new Date(dueDate) - new Date()) / (1000 * 60 * 60 * 24)));
+    return ((discountRate / days) * 365).toFixed(1);
+  };
 
   const stats = {
     totalInvoices: invoices.length,
     totalValue: invoices.reduce((sum, i) => sum + i.amount, 0),
-    avgYield: 13.8
+    avgYield: invoices.length > 0 ? (invoices.reduce((sum, i) => sum + parseFloat(i.estYield), 0) / invoices.length).toFixed(1) : 0,
+    activeBids: myBids.filter(b => b.status === 'PENDING').length
   };
 
   const handlePlaceBid = (invoice) => {
@@ -252,10 +282,26 @@ export default function Marketplace() {
     setShowBidModal(true);
   };
 
-  const submitBid = () => {
-    console.log('Submitting bid:', { invoice: selectedInvoice?.invoiceId, ...bidData });
-    setShowBidModal(false);
-    alert(`Bid placed successfully for ${selectedInvoice?.invoiceId} at ${bidData.rate}%!`);
+  const submitBid = async () => {
+    if (!selectedInvoice || !bidData.rate) return;
+
+    setSubmittingBid(true);
+    try {
+      await bidService.create({
+        invoiceId: selectedInvoice.id,
+        discountRate: parseFloat(bidData.rate),
+        processingFee: parseFloat(bidData.processingFee || 0),
+      });
+      setShowBidModal(false);
+      // Refresh data
+      fetchInvoices();
+      fetchMyBids();
+    } catch (err) {
+      console.error('Failed to submit bid:', err);
+      alert(err.message || 'Failed to submit bid');
+    } finally {
+      setSubmittingBid(false);
+    }
   };
 
   const filteredInvoices = invoices.filter(inv => {
@@ -268,6 +314,35 @@ export default function Marketplace() {
     if (filters.sector !== 'all' && inv.sector !== filters.sector) return false;
     return true;
   });
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="flex items-center space-x-2 text-gray-600">
+          <Loader2 className="animate-spin" size={24} />
+          <span>Loading marketplace...</span>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="bg-white p-8 rounded-xl shadow-sm text-center">
+          <AlertCircle className="mx-auto text-red-500 mb-4" size={48} />
+          <h2 className="text-xl font-semibold text-gray-800 mb-2">Error Loading Marketplace</h2>
+          <p className="text-gray-600 mb-4">{error}</p>
+          <button
+            onClick={fetchInvoices}
+            className="bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700"
+          >
+            Try Again
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -284,7 +359,10 @@ export default function Marketplace() {
                 <p className="text-sm text-gray-500">Browse and bid on approved invoices</p>
               </div>
             </div>
-            <button className="flex items-center space-x-2 px-3 py-2 border border-gray-300 rounded-lg hover:bg-gray-50">
+            <button
+              onClick={() => { fetchInvoices(); fetchMyBids(); }}
+              className="flex items-center space-x-2 px-3 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
+            >
               <RefreshCw size={16} /><span>Refresh</span>
             </button>
           </div>
@@ -309,7 +387,7 @@ export default function Marketplace() {
             </div>
             <div>
               <p className="text-purple-200 text-sm">Your Active Bids</p>
-              <p className="text-3xl font-bold">4</p>
+              <p className="text-3xl font-bold">{stats.activeBids}</p>
             </div>
           </div>
         </div>
@@ -420,13 +498,21 @@ export default function Marketplace() {
 
         {/* Invoice Cards */}
         <div className="space-y-4">
-          {filteredInvoices.map(invoice => (
-            <InvoiceCard 
-              key={invoice.id} 
-              invoice={invoice} 
-              onPlaceBid={handlePlaceBid}
-            />
-          ))}
+          {filteredInvoices.length === 0 ? (
+            <div className="bg-white rounded-xl border border-gray-200 p-12 text-center">
+              <Building2 className="mx-auto text-gray-400 mb-4" size={48} />
+              <p className="text-gray-600 font-medium">No invoices available for bidding</p>
+              <p className="text-gray-500 text-sm mt-1">Check back later for new opportunities</p>
+            </div>
+          ) : (
+            filteredInvoices.map(invoice => (
+              <InvoiceCard
+                key={invoice.id}
+                invoice={invoice}
+                onPlaceBid={handlePlaceBid}
+              />
+            ))
+          )}
         </div>
       </div>
 
@@ -543,11 +629,20 @@ export default function Marketplace() {
                 </button>
                 <button
                   onClick={submitBid}
-                  disabled={!bidData.rate}
+                  disabled={!bidData.rate || submittingBid}
                   className="flex-1 px-4 py-3 bg-purple-600 text-white rounded-lg hover:bg-purple-700 font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center space-x-2"
                 >
-                  <Check size={18} />
-                  <span>Submit Bid</span>
+                  {submittingBid ? (
+                    <>
+                      <Loader2 size={18} className="animate-spin" />
+                      <span>Submitting...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Check size={18} />
+                      <span>Submit Bid</span>
+                    </>
+                  )}
                 </button>
               </div>
             </div>

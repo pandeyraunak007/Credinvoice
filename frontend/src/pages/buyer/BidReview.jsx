@@ -1,9 +1,10 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { 
+import {
   ArrowLeft, Clock, CheckCircle, AlertCircle, Building2, Timer, Award,
-  ChevronDown, ChevronUp, Info, Check, X, Shield, Star, Phone, Mail, RefreshCw
+  ChevronDown, ChevronUp, Info, Check, X, Shield, Star, Phone, Mail, RefreshCw, Loader2
 } from 'lucide-react';
+import { invoiceService, bidService } from '../../services/api';
 
 const BidCard = ({ bid, isLowest, isSelected, onSelect, expanded, onToggleExpand }) => (
   <div className={`bg-white rounded-xl border-2 transition-all overflow-hidden ${
@@ -115,31 +116,130 @@ const BidCard = ({ bid, isLowest, isSelected, onSelect, expanded, onToggleExpand
 export default function BidReviewPage() {
   const navigate = useNavigate();
   const { id } = useParams();
+  const [loading, setLoading] = useState(true);
+  const [invoice, setInvoice] = useState(null);
+  const [bids, setBids] = useState([]);
   const [selectedBid, setSelectedBid] = useState(null);
   const [expandedBid, setExpandedBid] = useState(null);
   const [sortBy, setSortBy] = useState('rate');
   const [showConfirmModal, setShowConfirmModal] = useState(false);
+  const [confirming, setConfirming] = useState(false);
 
-  const invoice = { id: id || 'INV-2024-0076', seller: 'Steel Corp India', totalAmount: 500000, dueDate: '2025-02-27', earlyPaymentDate: '2025-01-15' };
+  const fetchData = async () => {
+    try {
+      setLoading(true);
+      // Fetch invoice and its bids
+      const [invoiceRes, bidsRes] = await Promise.all([
+        invoiceService.getById(id),
+        bidService.getForInvoice(id)
+      ]);
 
-  const bids = [
-    { id: 1, financierName: 'Urban Finance Ltd', financierType: 'NBFC', discountRate: 1.5, haircut: 0, processingFee: 0.25, netAmount: 491250, effectiveCost: 9.13, validUntil: 'Dec 30, 6:00 PM', hoursRemaining: 18, license: 'NBFC-ND-00123', rating: 4.8, totalDeals: 234, avgDisbursementTime: '4-6 hours', phone: '+91 22 4567 8901', email: 'deals@urbanfinance.in', terms: null },
-    { id: 2, financierName: 'HDFC Bank', financierType: 'Bank', discountRate: 1.6, haircut: 0, processingFee: 0.5, netAmount: 489500, effectiveCost: 9.75, validUntil: 'Dec 30, 5:00 PM', hoursRemaining: 17, license: 'RBI-BANK-00045', rating: 4.9, totalDeals: 1250, avgDisbursementTime: '2-4 hours', phone: '+91 22 6789 0123', email: 'scf@hdfc.com', terms: 'Subject to buyer credit limit' },
-    { id: 3, financierName: 'ICICI Bank', financierType: 'Bank', discountRate: 1.7, haircut: 0, processingFee: 0.4, netAmount: 489500, effectiveCost: 10.12, validUntil: 'Dec 30, 4:00 PM', hoursRemaining: 16, license: 'RBI-BANK-00032', rating: 4.7, totalDeals: 890, avgDisbursementTime: '3-5 hours', phone: '+91 22 5678 9012', email: 'scf@icici.com', terms: null },
-    { id: 4, financierName: 'Bajaj Finance', financierType: 'NBFC', discountRate: 1.8, haircut: 0, processingFee: 0, netAmount: 491000, effectiveCost: 10.95, validUntil: 'Dec 30, 8:00 PM', hoursRemaining: 20, license: 'NBFC-ND-00089', rating: 4.6, totalDeals: 567, avgDisbursementTime: '6-8 hours', phone: '+91 20 3456 7890', email: 'scf@bajajfinance.in', terms: 'Zero processing fee for first 3 transactions' },
-  ];
+      const inv = invoiceRes.data;
+      setInvoice({
+        id: inv.invoiceNumber || inv.id,
+        seller: inv.sellerName || 'Unknown Seller',
+        totalAmount: inv.totalAmount || 0,
+        dueDate: new Date(inv.dueDate).toLocaleDateString('en-IN'),
+        earlyPaymentDate: inv.earlyPaymentDate ? new Date(inv.earlyPaymentDate).toLocaleDateString('en-IN') : 'TBD'
+      });
+
+      // Transform bids
+      const transformedBids = (bidsRes.data || []).map(bid => {
+        const totalAmount = inv.totalAmount || 0;
+        const discountAmount = (totalAmount * (bid.discountRate || 0)) / 100;
+        const processingFeeAmount = (totalAmount * (bid.processingFee || 0)) / 100;
+        const netAmount = totalAmount - discountAmount - processingFeeAmount;
+        const daysToPayment = Math.ceil((new Date(inv.dueDate) - new Date()) / (1000 * 60 * 60 * 24));
+        const effectiveCost = ((bid.discountRate + (bid.processingFee || 0)) / daysToPayment * 365).toFixed(2);
+
+        return {
+          id: bid.id,
+          financierName: bid.financier?.companyName || 'Financier',
+          financierType: 'NBFC',
+          discountRate: bid.discountRate || 0,
+          haircut: bid.haircut || 0,
+          processingFee: bid.processingFee || 0,
+          netAmount: netAmount,
+          effectiveCost: effectiveCost,
+          validUntil: new Date(bid.expiresAt || Date.now() + 86400000).toLocaleDateString('en-IN'),
+          hoursRemaining: Math.ceil((new Date(bid.expiresAt || Date.now() + 86400000) - new Date()) / (1000 * 60 * 60)),
+          license: 'RBI Licensed',
+          rating: 4.5,
+          totalDeals: 100,
+          avgDisbursementTime: '4-6 hours',
+          phone: bid.financier?.phone || '+91 XX XXXX XXXX',
+          email: bid.financier?.email || 'contact@financier.com',
+          terms: bid.notes || null,
+          status: bid.status
+        };
+      }).filter(b => b.status === 'PENDING');
+
+      setBids(transformedBids);
+    } catch (error) {
+      console.error('Failed to fetch data:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (id) fetchData();
+  }, [id]);
 
   const sortedBids = [...bids].sort((a, b) => {
     if (sortBy === 'rate') return a.discountRate - b.discountRate;
     if (sortBy === 'netAmount') return b.netAmount - a.netAmount;
-    return a.effectiveCost - b.effectiveCost;
+    return parseFloat(a.effectiveCost) - parseFloat(b.effectiveCost);
   });
 
-  const lowestBid = bids.reduce((min, bid) => bid.discountRate < min.discountRate ? bid : min, bids[0]);
+  const lowestBid = bids.length > 0
+    ? bids.reduce((min, bid) => bid.discountRate < min.discountRate ? bid : min, bids[0])
+    : null;
   const selectedBidData = bids.find(b => b.id === selectedBid);
 
-  const handleSelectBid = (bidId) => { setSelectedBid(bidId); setShowConfirmModal(true); };
-  const handleConfirmBid = () => { setShowConfirmModal(false); alert('Bid confirmed! Financier will proceed with disbursement.'); navigate(`/invoices/${id}`); };
+  const handleSelectBid = (bidId) => {
+    setSelectedBid(bidId);
+    setShowConfirmModal(true);
+  };
+
+  const handleConfirmBid = async () => {
+    setConfirming(true);
+    try {
+      await bidService.accept(selectedBid);
+      setShowConfirmModal(false);
+      navigate(`/invoices/${id}`);
+    } catch (error) {
+      console.error('Failed to accept bid:', error);
+      alert(error.message || 'Failed to accept bid');
+    } finally {
+      setConfirming(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="flex items-center space-x-2 text-gray-600">
+          <Loader2 className="animate-spin" size={24} />
+          <span>Loading bids...</span>
+        </div>
+      </div>
+    );
+  }
+
+  if (!invoice) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <AlertCircle className="mx-auto text-red-500 mb-4" size={48} />
+          <p className="text-gray-600">Invoice not found</p>
+          <button onClick={() => navigate('/invoices')} className="mt-4 text-blue-600 hover:underline">
+            Back to Invoices
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -161,7 +261,7 @@ export default function BidReviewPage() {
                 <span className="text-gray-600">Bidding closes in</span>
                 <span className="font-semibold text-orange-600">16h 42m</span>
               </div>
-              <button className="flex items-center space-x-2 px-3 py-2 border border-gray-300 rounded-lg hover:bg-gray-50">
+              <button onClick={fetchData} className="flex items-center space-x-2 px-3 py-2 border border-gray-300 rounded-lg hover:bg-gray-50">
                 <RefreshCw size={16} /><span>Refresh</span>
               </button>
             </div>
@@ -183,26 +283,38 @@ export default function BidReviewPage() {
           </div>
 
           {/* Best Bid */}
-          <div className="bg-gradient-to-r from-green-50 to-emerald-50 border border-green-200 rounded-xl p-5 mb-6">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center space-x-4">
-                <div className="w-12 h-12 bg-green-100 rounded-full flex items-center justify-center">
-                  <Award size={24} className="text-green-600" />
+          {lowestBid ? (
+            <div className="bg-gradient-to-r from-green-50 to-emerald-50 border border-green-200 rounded-xl p-5 mb-6">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-4">
+                  <div className="w-12 h-12 bg-green-100 rounded-full flex items-center justify-center">
+                    <Award size={24} className="text-green-600" />
+                  </div>
+                  <div>
+                    <p className="text-sm text-green-700">Best Available Offer</p>
+                    <p className="text-xl font-bold text-green-800">{lowestBid.financierName} @ {lowestBid.discountRate}%</p>
+                  </div>
                 </div>
-                <div>
-                  <p className="text-sm text-green-700">Best Available Offer</p>
-                  <p className="text-xl font-bold text-green-800">{lowestBid.financierName} @ {lowestBid.discountRate}%</p>
+                <div className="text-right">
+                  <p className="text-sm text-green-700">Net Amount to Seller</p>
+                  <p className="text-2xl font-bold text-green-800">₹{lowestBid.netAmount.toLocaleString('en-IN')}</p>
                 </div>
+                <button onClick={() => handleSelectBid(lowestBid.id)} className="bg-green-600 text-white px-6 py-3 rounded-lg hover:bg-green-700 font-medium">
+                  Accept Best Offer
+                </button>
               </div>
-              <div className="text-right">
-                <p className="text-sm text-green-700">Net Amount to Seller</p>
-                <p className="text-2xl font-bold text-green-800">₹{lowestBid.netAmount.toLocaleString('en-IN')}</p>
-              </div>
-              <button onClick={() => handleSelectBid(lowestBid.id)} className="bg-green-600 text-white px-6 py-3 rounded-lg hover:bg-green-700 font-medium">
-                Accept Best Offer
-              </button>
             </div>
-          </div>
+          ) : (
+            <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-5 mb-6">
+              <div className="flex items-center space-x-4">
+                <AlertCircle size={24} className="text-yellow-600" />
+                <div>
+                  <p className="font-medium text-yellow-800">No bids yet</p>
+                  <p className="text-sm text-yellow-700">Financiers will place bids shortly. Check back later.</p>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Sort */}
           <div className="flex items-center justify-between mb-4">
@@ -284,9 +396,13 @@ export default function BidReviewPage() {
               </div>
 
               <div className="flex items-center space-x-3">
-                <button onClick={() => setShowConfirmModal(false)} className="flex-1 px-4 py-3 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 font-medium">Cancel</button>
-                <button onClick={handleConfirmBid} className="flex-1 px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium flex items-center justify-center space-x-2">
-                  <CheckCircle size={18} /><span>Confirm</span>
+                <button onClick={() => setShowConfirmModal(false)} disabled={confirming} className="flex-1 px-4 py-3 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 font-medium disabled:opacity-50">Cancel</button>
+                <button onClick={handleConfirmBid} disabled={confirming} className="flex-1 px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium flex items-center justify-center space-x-2 disabled:opacity-50">
+                  {confirming ? (
+                    <><Loader2 size={18} className="animate-spin" /><span>Confirming...</span></>
+                  ) : (
+                    <><CheckCircle size={18} /><span>Confirm</span></>
+                  )}
                 </button>
               </div>
             </div>

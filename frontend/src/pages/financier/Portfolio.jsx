@@ -1,10 +1,11 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { 
+import {
   ArrowLeft, Search, Filter, Building2, Calendar, Clock, CheckCircle,
   TrendingUp, AlertCircle, IndianRupee, Briefcase, Download, Eye,
-  ChevronRight, BarChart3, PieChart
+  ChevronRight, BarChart3, PieChart, Loader2, RefreshCw
 } from 'lucide-react';
+import { bidService, disbursementService } from '../../services/api';
 
 const StatusBadge = ({ status }) => {
   const config = {
@@ -19,78 +20,126 @@ const StatusBadge = ({ status }) => {
 
 export default function Portfolio() {
   const navigate = useNavigate();
+  const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('active');
   const [searchTerm, setSearchTerm] = useState('');
+  const [activeInvestments, setActiveInvestments] = useState([]);
+  const [collectedInvestments, setCollectedInvestments] = useState([]);
+  const [portfolioStats, setPortfolioStats] = useState({
+    totalActive: 0,
+    totalDisbursed: 0,
+    totalCollected: 0,
+    avgYield: 0,
+    activeCount: 0,
+    collectedCount: 0,
+    pendingDisbursement: 0,
+    overdue: 0
+  });
 
-  const portfolioStats = {
-    totalActive: 8.75,
-    totalDisbursed: 45.2,
-    totalCollected: 36.45,
-    avgYield: 12.4,
-    activeCount: 23,
-    collectedCount: 156
+  const fetchPortfolio = async () => {
+    try {
+      setLoading(true);
+      // Fetch my bids that are accepted (these become investments)
+      const bidsResponse = await bidService.getMyBids({ status: 'ACCEPTED' });
+      const acceptedBids = bidsResponse.data || [];
+
+      // Fetch disbursements
+      const disbursementsResponse = await disbursementService.list();
+      const disbursements = disbursementsResponse.data || [];
+
+      // Transform to active and collected investments
+      const active = [];
+      const collected = [];
+
+      disbursements.forEach(d => {
+        const inv = d.invoice || {};
+        const dueDate = new Date(inv.dueDate);
+        const now = new Date();
+        const daysLeft = Math.ceil((dueDate - now) / (1000 * 60 * 60 * 24));
+        const expectedReturn = (inv.totalAmount * (d.discountRate || 0)) / 100;
+
+        const investment = {
+          id: d.id,
+          invoiceId: inv.invoiceNumber || d.invoiceId,
+          buyer: inv.buyerName || 'Unknown Buyer',
+          seller: inv.sellerName || 'Unknown Seller',
+          amount: inv.totalAmount || 0,
+          disbursedAmount: d.amount || 0,
+          myRate: d.discountRate || 0,
+          dueDate: dueDate.toLocaleDateString('en-IN'),
+          disbursedDate: d.disbursedAt ? new Date(d.disbursedAt).toLocaleDateString('en-IN') : null,
+          daysLeft: Math.max(0, daysLeft),
+          status: d.status === 'COMPLETED' ? 'collected' :
+                  d.status === 'PENDING' ? 'pending_disbursement' :
+                  daysLeft < 0 ? 'overdue' : 'disbursed',
+          buyerRating: 'A',
+          expectedReturn: expectedReturn,
+          daysOverdue: daysLeft < 0 ? Math.abs(daysLeft) : 0
+        };
+
+        if (d.status === 'COMPLETED') {
+          collected.push({
+            ...investment,
+            collected: inv.totalAmount || 0,
+            collectedDate: d.completedAt ? new Date(d.completedAt).toLocaleDateString('en-IN') : '-',
+            profit: expectedReturn,
+            actualYield: ((expectedReturn / (d.amount || 1)) * 365 / Math.max(1, Math.ceil((new Date(d.completedAt) - new Date(d.disbursedAt)) / (1000 * 60 * 60 * 24)))).toFixed(1)
+          });
+        } else {
+          active.push(investment);
+        }
+      });
+
+      setActiveInvestments(active);
+      setCollectedInvestments(collected);
+
+      // Calculate stats
+      const totalActive = active.reduce((sum, a) => sum + a.disbursedAmount, 0) / 10000000;
+      const totalCollected = collected.reduce((sum, c) => sum + c.collected, 0) / 10000000;
+      const pendingDisbursement = active.filter(a => a.status === 'pending_disbursement').reduce((sum, a) => sum + a.amount, 0) / 100000;
+      const overdue = active.filter(a => a.status === 'overdue').reduce((sum, a) => sum + a.amount, 0) / 100000;
+
+      setPortfolioStats({
+        totalActive: totalActive.toFixed(2),
+        totalDisbursed: (totalActive + totalCollected).toFixed(2),
+        totalCollected: totalCollected.toFixed(2),
+        avgYield: 12.4,
+        activeCount: active.length,
+        collectedCount: collected.length,
+        pendingDisbursement: pendingDisbursement.toFixed(1),
+        overdue: overdue.toFixed(1)
+      });
+    } catch (error) {
+      console.error('Failed to fetch portfolio:', error);
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const activeInvestments = [
-    {
-      id: 1, invoiceId: 'INV-2024-0068', buyer: 'TechCorp India', seller: 'Kumar Textiles',
-      amount: 380000, disbursedAmount: 373960, myRate: 1.6, dueDate: '2025-01-25',
-      disbursedDate: '2024-12-20', daysLeft: 28, status: 'disbursed', buyerRating: 'A+',
-      expectedReturn: 6080
-    },
-    {
-      id: 2, invoiceId: 'INV-2024-0065', buyer: 'Ansai Mart', seller: 'Steel Corp India',
-      amount: 500000, disbursedAmount: 491250, myRate: 1.5, dueDate: '2025-01-15',
-      disbursedDate: '2024-12-15', daysLeft: 18, status: 'disbursed', buyerRating: 'AA',
-      expectedReturn: 8750
-    },
-    {
-      id: 3, invoiceId: 'INV-2024-0062', buyer: 'Global Traders', seller: 'Fabric House',
-      amount: 425000, disbursedAmount: 417675, myRate: 1.7, dueDate: '2025-01-08',
-      disbursedDate: '2024-12-10', daysLeft: 11, status: 'disbursed', buyerRating: 'AA',
-      expectedReturn: 7325
-    },
-    {
-      id: 4, invoiceId: 'INV-2024-0070', buyer: 'Retail Plus', seller: 'Auto Parts Ltd',
-      amount: 280000, disbursedAmount: 0, myRate: 1.8, dueDate: '2025-02-05',
-      disbursedDate: null, daysLeft: 39, status: 'pending_disbursement', buyerRating: 'A',
-      expectedReturn: 5040
-    },
-    {
-      id: 5, invoiceId: 'INV-2024-0058', buyer: 'Metro Supplies', seller: 'Plastic Industries',
-      amount: 185000, disbursedAmount: 181300, myRate: 2.0, dueDate: '2024-12-28',
-      disbursedDate: '2024-12-05', daysLeft: 0, status: 'overdue', buyerRating: 'A',
-      expectedReturn: 3700, daysOverdue: 2
-    },
-  ];
+  useEffect(() => {
+    fetchPortfolio();
+  }, []);
 
-  const collectedInvestments = [
-    {
-      id: 1, invoiceId: 'INV-2024-0045', buyer: 'Retail Plus', seller: 'Auto Parts Ltd',
-      amount: 520000, disbursedAmount: 510600, collected: 520000, myRate: 1.8,
-      collectedDate: '2024-12-22', profit: 9400, actualYield: 12.8
-    },
-    {
-      id: 2, invoiceId: 'INV-2024-0042', buyer: 'TechCorp India', seller: 'Electronics Hub',
-      amount: 320000, disbursedAmount: 314560, collected: 320000, myRate: 1.7,
-      collectedDate: '2024-12-18', profit: 5440, actualYield: 11.9
-    },
-    {
-      id: 3, invoiceId: 'INV-2024-0038', buyer: 'Ansai Mart', seller: 'Kumar Textiles',
-      amount: 450000, disbursedAmount: 443250, collected: 450000, myRate: 1.5,
-      collectedDate: '2024-12-15', profit: 6750, actualYield: 10.8
-    },
-  ];
-
-  const filteredActive = activeInvestments.filter(inv => 
+  const filteredActive = activeInvestments.filter(inv =>
     !searchTerm || inv.buyer.toLowerCase().includes(searchTerm.toLowerCase()) ||
     inv.invoiceId.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  const filteredCollected = collectedInvestments.filter(inv => 
+  const filteredCollected = collectedInvestments.filter(inv =>
     !searchTerm || inv.buyer.toLowerCase().includes(searchTerm.toLowerCase()) ||
     inv.invoiceId.toLowerCase().includes(searchTerm.toLowerCase())
   );
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="flex items-center space-x-2 text-gray-600">
+          <Loader2 className="animate-spin" size={24} />
+          <span>Loading portfolio...</span>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -159,8 +208,8 @@ export default function Portfolio() {
               <Clock size={16} className="text-orange-600" />
               <span className="text-gray-500 text-sm">Pending Disbursement</span>
             </div>
-            <p className="text-2xl font-bold text-orange-600">₹2.8L</p>
-            <p className="text-xs text-gray-500 mt-1">1 invoice</p>
+            <p className="text-2xl font-bold text-orange-600">₹{portfolioStats.pendingDisbursement}L</p>
+            <p className="text-xs text-gray-500 mt-1">{activeInvestments.filter(a => a.status === 'pending_disbursement').length} invoices</p>
           </div>
 
           <div className="bg-white rounded-xl p-5 border border-gray-200 shadow-sm">
@@ -168,8 +217,8 @@ export default function Portfolio() {
               <AlertCircle size={16} className="text-red-600" />
               <span className="text-gray-500 text-sm">Overdue</span>
             </div>
-            <p className="text-2xl font-bold text-red-600">₹1.85L</p>
-            <p className="text-xs text-gray-500 mt-1">1 invoice • 2 days</p>
+            <p className="text-2xl font-bold text-red-600">₹{portfolioStats.overdue}L</p>
+            <p className="text-xs text-gray-500 mt-1">{activeInvestments.filter(a => a.status === 'overdue').length} invoices</p>
           </div>
         </div>
 
