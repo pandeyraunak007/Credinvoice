@@ -25,7 +25,13 @@ const apiRequest = async (endpoint, options = {}) => {
     const data = await response.json();
 
     if (!response.ok) {
-      throw new Error(data.message || 'API request failed');
+      // Include validation errors in the error message if available
+      let errorMessage = data.message || 'API request failed';
+      if (data.errors && Array.isArray(data.errors)) {
+        const errorDetails = data.errors.map(e => `${e.field}: ${e.message}`).join(', ');
+        errorMessage = `${errorMessage} - ${errorDetails}`;
+      }
+      throw new Error(errorMessage);
     }
 
     return data;
@@ -401,6 +407,64 @@ export const adminService = {
   },
 };
 
+// Analytics Service
+export const analyticsService = {
+  // Buyer Analytics
+  getBuyerSummary: (period = 'month') =>
+    apiRequest(`/analytics/buyer/summary?period=${period}`),
+
+  getBuyerInvoiceTrends: (period = 'month', groupBy = 'week') =>
+    apiRequest(`/analytics/buyer/invoice-trends?period=${period}&groupBy=${groupBy}`),
+
+  getBuyerDiscountSavings: (period = 'month') =>
+    apiRequest(`/analytics/buyer/discount-savings?period=${period}`),
+
+  getBuyerSellerPerformance: (period = 'month', limit = 10) =>
+    apiRequest(`/analytics/buyer/seller-performance?period=${period}&limit=${limit}`),
+
+  getBuyerFundingBreakdown: (period = 'month') =>
+    apiRequest(`/analytics/buyer/funding-breakdown?period=${period}`),
+
+  // Seller Analytics
+  getSellerSummary: (period = 'month') =>
+    apiRequest(`/analytics/seller/summary?period=${period}`),
+
+  getSellerRevenueTrends: (period = 'month', groupBy = 'week') =>
+    apiRequest(`/analytics/seller/revenue-trends?period=${period}&groupBy=${groupBy}`),
+
+  getSellerDiscountAnalysis: (period = 'month') =>
+    apiRequest(`/analytics/seller/discount-analysis?period=${period}`),
+
+  getSellerBuyerMetrics: (period = 'month', limit = 10) =>
+    apiRequest(`/analytics/seller/buyer-metrics?period=${period}&limit=${limit}`),
+
+  // Financier Analytics
+  getFinancierSummary: (period = 'month') =>
+    apiRequest(`/analytics/financier/summary?period=${period}`),
+
+  getFinancierPortfolioTrends: (period = 'month', groupBy = 'week') =>
+    apiRequest(`/analytics/financier/portfolio-trends?period=${period}&groupBy=${groupBy}`),
+
+  getFinancierYieldAnalysis: (period = 'month') =>
+    apiRequest(`/analytics/financier/yield-analysis?period=${period}`),
+
+  getFinancierSectorBreakdown: () =>
+    apiRequest('/analytics/financier/sector-breakdown'),
+
+  // Admin Analytics
+  getAdminPlatformSummary: (period = 'month') =>
+    apiRequest(`/analytics/admin/platform-summary?period=${period}`),
+
+  getAdminUserGrowth: (period = 'month', groupBy = 'week') =>
+    apiRequest(`/analytics/admin/user-growth?period=${period}&groupBy=${groupBy}`),
+
+  getAdminKycFunnel: (period = 'month') =>
+    apiRequest(`/analytics/admin/kyc-funnel?period=${period}`),
+
+  getAdminInvoiceDistribution: (period = 'month') =>
+    apiRequest(`/analytics/admin/invoice-distribution?period=${period}`),
+};
+
 export default {
   auth: authService,
   profile: profileService,
@@ -410,4 +474,5 @@ export default {
   discount: discountService,
   disbursement: disbursementService,
   admin: adminService,
+  analytics: analyticsService,
 };

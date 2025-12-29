@@ -15,6 +15,7 @@ import bidRoutes from './modules/bids/bid.routes';
 import disbursementRoutes from './modules/disbursements/disbursement.routes';
 import notificationRoutes from './modules/notifications/notification.routes';
 import adminRoutes from './modules/admin/admin.routes';
+import analyticsRoutes from './modules/analytics/analytics.routes';
 
 export function createApp(): Express {
   const app = express();
@@ -47,6 +48,7 @@ export function createApp(): Express {
   app.use(`${API_PREFIX}/disbursements`, disbursementRoutes);
   app.use(`${API_PREFIX}/notifications`, notificationRoutes);
   app.use(`${API_PREFIX}/admin`, adminRoutes);
+  app.use(`${API_PREFIX}/analytics`, analyticsRoutes);
 
   // 404 handler
   app.use(notFoundHandler);

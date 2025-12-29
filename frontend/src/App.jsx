@@ -12,6 +12,7 @@ import InvoicesPage from './pages/buyer/Invoices';
 import CreateInvoice from './pages/buyer/CreateInvoice';
 import InvoiceDetail from './pages/buyer/InvoiceDetail';
 import BidReviewPage from './pages/buyer/BidReview';
+import BuyerAnalytics from './pages/buyer/Analytics';
 
 // Import Seller pages
 import { SellerDashboard, OfferDetailPage } from './pages/seller/SellerPortal';
@@ -220,6 +221,14 @@ function AppRoutes() {
         element={
           <ProtectedRoute allowedRoles={['BUYER', 'SELLER']}>
             <BidReviewPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/analytics"
+        element={
+          <ProtectedRoute allowedRoles={['BUYER']}>
+            <BuyerAnalytics />
           </ProtectedRoute>
         }
       />

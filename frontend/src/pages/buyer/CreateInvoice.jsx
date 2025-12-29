@@ -535,8 +535,24 @@ export default function CreateInvoice() {
     if (!invoiceData.invoiceDate) newErrors.invoiceDate = 'Invoice date is required';
     if (!invoiceData.dueDate) newErrors.dueDate = 'Due date is required';
     if (!selectedSeller) newErrors.seller = 'Please select a seller';
-    if (!amounts.totalAmount || parseFloat(amounts.totalAmount) <= 0) {
+    if (!selectedSeller?.companyName) newErrors.seller = 'Seller name is required';
+    if (!buyerInfo.companyName) newErrors.buyer = 'Buyer company name is missing in profile';
+
+    const subtotal = parseFloat(amounts.subtotal) || 0;
+    const totalAmount = parseFloat(amounts.totalAmount) || 0;
+
+    if (subtotal <= 0) {
+      newErrors.subtotal = 'Subtotal must be greater than 0. Add line items or enter amounts.';
+    }
+    if (totalAmount <= 0) {
       newErrors.totalAmount = 'Total amount must be greater than 0';
+    }
+
+    // Check due date is after invoice date
+    if (invoiceData.invoiceDate && invoiceData.dueDate) {
+      if (new Date(invoiceData.dueDate) <= new Date(invoiceData.invoiceDate)) {
+        newErrors.dueDate = 'Due date must be after invoice date';
+      }
     }
 
     setErrors(newErrors);
@@ -554,9 +570,9 @@ export default function CreateInvoice() {
         invoiceNumber: invoiceData.invoiceNumber,
         invoiceDate: invoiceData.invoiceDate,
         dueDate: invoiceData.dueDate,
-        sellerGstin: selectedSeller?.gstin || '',
+        sellerGstin: selectedSeller?.gstin || null,
         sellerName: selectedSeller?.companyName || '',
-        buyerGstin: buyerInfo.gstin || '',
+        buyerGstin: buyerInfo.gstin || null,
         buyerName: buyerInfo.companyName || '',
         subtotal: parseFloat(amounts.subtotal) || 0,
         taxAmount: (parseFloat(amounts.cgst) || 0) + (parseFloat(amounts.sgst) || 0) + (parseFloat(amounts.igst) || 0),
@@ -765,14 +781,16 @@ export default function CreateInvoice() {
           <FormSection title="Amount Details" icon={IndianRupee}>
             <div className="grid grid-cols-2 gap-6">
               <div className="space-y-4">
-                <FormField label="Subtotal">
+                <FormField label="Subtotal" error={errors.subtotal}>
                   <div className="relative">
                     <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500">₹</span>
                     <input
                       type="text"
                       value={amounts.subtotal}
                       readOnly
-                      className="w-full pl-8 pr-4 py-2.5 bg-gray-50 border border-gray-200 rounded-lg text-right font-medium"
+                      className={`w-full pl-8 pr-4 py-2.5 bg-gray-50 border rounded-lg text-right font-medium ${
+                        errors.subtotal ? 'border-red-300' : 'border-gray-200'
+                      }`}
                     />
                   </div>
                 </FormField>

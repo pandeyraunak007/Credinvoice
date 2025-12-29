@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { 
-  Bell, Plus, FileText, TrendingUp, Clock, CreditCard, Users, AlertCircle, 
-  ChevronRight, Download, Building2, IndianRupee, CheckCircle
+import {
+  Bell, Plus, FileText, TrendingUp, Clock, CreditCard, Users, AlertCircle,
+  ChevronRight, Download, Building2, IndianRupee, CheckCircle, BarChart3
 } from 'lucide-react';
 
 export default function BuyerDashboard() {
@@ -86,6 +86,10 @@ export default function BuyerDashboard() {
             <Link to="/invoices" className="flex items-center space-x-3 px-3 py-2.5 text-gray-700 hover:bg-gray-50 rounded-lg">
               <Users size={20} />
               <span>My Vendors</span>
+            </Link>
+            <Link to="/analytics" className="flex items-center space-x-3 px-3 py-2.5 text-gray-700 hover:bg-gray-50 rounded-lg">
+              <BarChart3 size={20} />
+              <span>Analytics</span>
             </Link>
             <Link to="/invoices" className="flex items-center space-x-3 px-3 py-2.5 text-gray-700 hover:bg-gray-50 rounded-lg">
               <Building2 size={20} />
