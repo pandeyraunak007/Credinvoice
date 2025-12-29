@@ -79,6 +79,22 @@ export const profileService = {
       method: 'POST',
       body: JSON.stringify(data),
     }),
+
+  // Get verified sellers for invoice creation
+  getVerifiedSellers: (search = '') => {
+    const params = search ? `?search=${encodeURIComponent(search)}` : '';
+    return apiRequest(`/profile/sellers${params}`);
+  },
+
+  // Create seller referral
+  createSellerReferral: (data) =>
+    apiRequest('/profile/referrals', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  // Get my referrals
+  getMyReferrals: () => apiRequest('/profile/referrals'),
 };
 
 // KYC Service

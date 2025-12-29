@@ -16,6 +16,9 @@ import {
   updateBankAccount,
   deleteBankAccount,
   setPrimaryBankAccount,
+  getVerifiedSellers,
+  createSellerReferral,
+  getMyReferrals,
 } from './profile.controller';
 
 const router = Router();
@@ -55,5 +58,12 @@ router.post('/bank-accounts', validateBody(addBankAccountSchema), addBankAccount
 router.put('/bank-accounts/:accountId', validateBody(updateBankAccountSchema), updateBankAccount);
 router.delete('/bank-accounts/:accountId', deleteBankAccount);
 router.post('/bank-accounts/:accountId/set-primary', setPrimaryBankAccount);
+
+// Verified sellers routes (for buyer invoice creation)
+router.get('/sellers', getVerifiedSellers);
+
+// Seller referral routes
+router.get('/referrals', getMyReferrals);
+router.post('/referrals', createSellerReferral);
 
 export default router;

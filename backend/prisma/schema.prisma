@@ -430,8 +430,35 @@ model AuditLog {
 }
 
 // ============================================
+// SELLER REFERRALS
+// ============================================
+
+model SellerReferral {
+  id           String         @id @default(uuid())
+  referrerId   String         @map("referrer_id")
+  email        String
+  companyName  String         @map("company_name")
+  gstin        String?
+  contactPhone String?        @map("contact_phone")
+  status       ReferralStatus @default(PENDING)
+  invitedAt    DateTime       @default(now()) @map("invited_at")
+  completedAt  DateTime?      @map("completed_at")
+  sellerId     String?        @map("seller_id")
+
+  @@map("seller_referrals")
+}
+
+// ============================================
 // ENUMS
 // ============================================
+
+enum ReferralStatus {
+  PENDING
+  INVITED
+  REGISTERED
+  COMPLETED
+  EXPIRED
+}
 
 enum UserType {
   BUYER

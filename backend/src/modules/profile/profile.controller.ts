@@ -107,3 +107,41 @@ export const setPrimaryBankAccount = asyncHandler(async (req: Request, res: Resp
 
   return sendSuccess(res, updated, 'Primary bank account updated');
 });
+
+// Get verified sellers (for buyer invoice creation)
+export const getVerifiedSellers = asyncHandler(async (req: Request, res: Response) => {
+  if (!req.user) {
+    return sendError(res, 'Not authenticated', 401);
+  }
+
+  const { search } = req.query;
+  const sellers = await profileService.getVerifiedSellers(search as string | undefined);
+
+  return sendSuccess(res, sellers);
+});
+
+// Create seller referral
+export const createSellerReferral = asyncHandler(async (req: Request, res: Response) => {
+  if (!req.user) {
+    return sendError(res, 'Not authenticated', 401);
+  }
+
+  if (req.user.userType !== 'BUYER') {
+    return sendError(res, 'Only buyers can refer sellers', 403);
+  }
+
+  const referral = await profileService.createSellerReferral(req.user.userId, req.body);
+
+  return sendCreated(res, referral, 'Seller referral created successfully');
+});
+
+// Get my referrals
+export const getMyReferrals = asyncHandler(async (req: Request, res: Response) => {
+  if (!req.user) {
+    return sendError(res, 'Not authenticated', 401);
+  }
+
+  const referrals = await profileService.getMyReferrals(req.user.userId);
+
+  return sendSuccess(res, referrals);
+});

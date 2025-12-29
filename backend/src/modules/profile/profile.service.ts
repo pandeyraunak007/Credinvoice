@@ -354,6 +354,103 @@ export class ProfileService {
       data: { isPrimary: false },
     });
   }
+
+  // Get all KYC-verified sellers (for buyer invoice creation)
+  // In production, filter by kycStatus: 'APPROVED'
+  // For demo/development, return all sellers
+  async getVerifiedSellers(search?: string) {
+    const where: any = {};
+
+    // For production, uncomment this:
+    // where.kycStatus = 'APPROVED';
+
+    if (search) {
+      where.OR = [
+        { companyName: { contains: search, mode: 'insensitive' } },
+        { gstin: { contains: search, mode: 'insensitive' } },
+      ];
+    }
+
+    const sellers = await prisma.seller.findMany({
+      where,
+      select: {
+        id: true,
+        userId: true,
+        companyName: true,
+        gstin: true,
+        businessType: true,
+        city: true,
+        state: true,
+        kycStatus: true,
+      },
+      orderBy: { companyName: 'asc' },
+      take: 50,
+    });
+
+    return sellers;
+  }
+
+  // Create a seller referral (when seller is not in the system)
+  async createSellerReferral(
+    referrerId: string,
+    data: { email: string; companyName: string; gstin?: string; contactPhone?: string }
+  ) {
+    // Check if seller already exists with this email
+    const existingByEmail = await prisma.user.findUnique({
+      where: { email: data.email },
+    });
+
+    if (existingByEmail) {
+      throw new AppError('A user with this email already exists', 409);
+    }
+
+    // Check if GSTIN already exists
+    if (data.gstin) {
+      const existingByGstin = await prisma.seller.findUnique({
+        where: { gstin: data.gstin },
+      });
+
+      if (existingByGstin) {
+        throw new AppError('A seller with this GSTIN already exists', 409);
+      }
+    }
+
+    // Check if referral already exists
+    const existingReferral = await prisma.sellerReferral.findFirst({
+      where: {
+        email: data.email,
+        status: 'PENDING',
+      },
+    });
+
+    if (existingReferral) {
+      throw new AppError('A referral for this email is already pending', 409);
+    }
+
+    // Create referral record
+    const referral = await prisma.sellerReferral.create({
+      data: {
+        referrerId,
+        email: data.email,
+        companyName: data.companyName,
+        gstin: data.gstin,
+        contactPhone: data.contactPhone,
+        status: 'PENDING',
+      },
+    });
+
+    return referral;
+  }
+
+  // Get referrals made by a buyer
+  async getMyReferrals(referrerId: string) {
+    const referrals = await prisma.sellerReferral.findMany({
+      where: { referrerId },
+      orderBy: { invitedAt: 'desc' },
+    });
+
+    return referrals;
+  }
 }
 
 export const profileService = new ProfileService();

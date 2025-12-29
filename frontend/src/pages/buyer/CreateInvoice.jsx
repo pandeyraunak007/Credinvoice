@@ -1,294 +1,572 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  Upload, FileText, CheckCircle, AlertTriangle, X, ArrowLeft, ArrowRight,
-  Loader2, Sparkles, Edit2, Calendar, Building2, PenLine,
-  Percent, Clock, Send, Save, Info, Check, AlertCircle, RefreshCw,
-  ZoomIn, ZoomOut, RotateCw, Download
+  ArrowLeft, Plus, Trash2, Upload, FileText, Search, Building2, User,
+  Calendar, IndianRupee, Package, Paperclip, CheckCircle, AlertCircle,
+  X, Loader2, ChevronDown, UserPlus, Send, Save, Info, Check
 } from 'lucide-react';
-import { invoiceService } from '../../services/api';
+import { invoiceService, profileService } from '../../services/api';
+import { useAuth } from '../../context/AuthContext';
 
-// Step indicator
-const StepIndicator = ({ currentStep, steps }) => (
-  <div className="flex items-center justify-center mb-8">
-    {steps.map((step, index) => (
-      <React.Fragment key={step.id}>
-        <div className="flex items-center">
-          <div className={`
-            w-10 h-10 rounded-full flex items-center justify-center font-medium text-sm
-            ${index < currentStep ? 'bg-green-500 text-white' : 
-              index === currentStep ? 'bg-blue-600 text-white' : 
-              'bg-gray-200 text-gray-500'}
-          `}>
-            {index < currentStep ? <Check size={20} /> : index + 1}
-          </div>
-          <span className={`ml-2 text-sm font-medium ${index <= currentStep ? 'text-gray-800' : 'text-gray-400'}`}>
-            {step.label}
-          </span>
-        </div>
-        {index < steps.length - 1 && (
-          <div className={`w-16 h-0.5 mx-4 ${index < currentStep ? 'bg-green-500' : 'bg-gray-200'}`} />
-        )}
-      </React.Fragment>
-    ))}
-  </div>
-);
+// Form Section Component
+const FormSection = ({ title, icon: Icon, children, collapsible = false, allowOverflow = false }) => {
+  const [isOpen, setIsOpen] = useState(true);
 
-// Confidence indicator
-const ConfidenceIndicator = ({ confidence }) => {
-  const getColor = () => {
-    if (confidence >= 90) return 'text-green-600 bg-green-50';
-    if (confidence >= 70) return 'text-yellow-600 bg-yellow-50';
-    return 'text-red-600 bg-red-50';
-  };
   return (
-    <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${getColor()}`}>
-      {confidence}%
-    </span>
+    <div className={`bg-white rounded-xl border border-gray-200 ${allowOverflow ? '' : 'overflow-hidden'}`}>
+      <div
+        className={`px-6 py-4 bg-gray-50 border-b border-gray-200 flex items-center justify-between rounded-t-xl ${collapsible ? 'cursor-pointer' : ''}`}
+        onClick={() => collapsible && setIsOpen(!isOpen)}
+      >
+        <div className="flex items-center space-x-3">
+          {Icon && <Icon size={20} className="text-gray-600" />}
+          <h3 className="font-semibold text-gray-800">{title}</h3>
+        </div>
+        {collapsible && (
+          <ChevronDown size={20} className={`text-gray-500 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+        )}
+      </div>
+      {isOpen && <div className={`p-6 ${allowOverflow ? 'overflow-visible' : ''}`}>{children}</div>}
+    </div>
   );
 };
 
-// Editable field
-const ExtractedField = ({ label, value, confidence, required, onChange, type = 'text', warning, verified }) => {
-  const [isEditing, setIsEditing] = useState(false);
-  const [editValue, setEditValue] = useState(value);
-  const needsReview = confidence < 80;
+// Form Field Component
+const FormField = ({ label, required, error, hint, children }) => (
+  <div>
+    <label className="block text-sm font-medium text-gray-700 mb-1.5">
+      {label} {required && <span className="text-red-500">*</span>}
+    </label>
+    {children}
+    {hint && !error && <p className="mt-1 text-xs text-gray-500">{hint}</p>}
+    {error && <p className="mt-1 text-xs text-red-600">{error}</p>}
+  </div>
+);
+
+// Seller Search Dropdown Component
+const SellerSearchDropdown = ({ value, onChange, onAddNew, error }) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const [search, setSearch] = useState('');
+  const [sellers, setSellers] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [fetchError, setFetchError] = useState(null);
+  const dropdownRef = useRef(null);
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target)) {
+        setIsOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  // Fetch sellers function
+  const fetchSellers = useCallback(async (searchTerm = '') => {
+    console.log('[SellerDropdown] Starting fetch, search:', searchTerm);
+    setLoading(true);
+    setFetchError(null);
+    try {
+      const response = await profileService.getVerifiedSellers(searchTerm);
+      console.log('[SellerDropdown] API Response:', response);
+      const sellersList = response?.data || [];
+      console.log('[SellerDropdown] Sellers list:', sellersList);
+      setSellers(sellersList);
+    } catch (err) {
+      console.error('[SellerDropdown] Fetch error:', err);
+      setFetchError(err.message);
+      setSellers([]);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  // Fetch when dropdown opens
+  useEffect(() => {
+    if (isOpen) {
+      console.log('[SellerDropdown] Dropdown opened, fetching sellers...');
+      fetchSellers(search);
+    }
+  }, [isOpen]);
+
+  // Fetch on search change (with debounce)
+  useEffect(() => {
+    if (!isOpen || search === '') return;
+
+    const timer = setTimeout(() => {
+      fetchSellers(search);
+    }, 300);
+
+    return () => clearTimeout(timer);
+  }, [search]);
+
+  const handleSelect = (seller) => {
+    console.log('[SellerDropdown] Selected seller:', seller);
+    onChange(seller);
+    setIsOpen(false);
+    setSearch('');
+  };
+
+  const handleOpen = () => {
+    console.log('[SellerDropdown] Toggle dropdown, current isOpen:', isOpen);
+    setIsOpen(!isOpen);
+  };
 
   return (
-    <div className={`p-3 rounded-lg border ${needsReview ? 'border-yellow-300 bg-yellow-50' : 'border-gray-200 bg-white'}`}>
-      <div className="flex items-center justify-between mb-1">
-        <label className="text-sm font-medium text-gray-700 flex items-center space-x-1">
-          <span>{label}</span>
-          {required && <span className="text-red-500">*</span>}
-          {needsReview && (
-            <span className="ml-2 text-yellow-600 text-xs flex items-center">
-              <AlertTriangle size={12} className="mr-1" />
-              Review needed
-            </span>
-          )}
-        </label>
-        <div className="flex items-center space-x-2">
-          <ConfidenceIndicator confidence={confidence} />
-          {verified && <CheckCircle size={16} className="text-green-500" />}
-        </div>
+    <div className="relative" ref={dropdownRef}>
+      <div
+        className={`w-full px-4 py-3 border rounded-lg cursor-pointer flex items-center justify-between ${
+          error ? 'border-red-300 bg-red-50' : 'border-gray-300 hover:border-gray-400'
+        } ${value ? 'bg-green-50 border-green-300' : ''}`}
+        onClick={handleOpen}
+      >
+        {value ? (
+          <div className="flex items-center space-x-3">
+            <div className="w-8 h-8 bg-green-100 rounded-full flex items-center justify-center">
+              <Building2 size={16} className="text-green-600" />
+            </div>
+            <div>
+              <p className="font-medium text-gray-800">{value.companyName}</p>
+              <p className="text-xs text-gray-500 font-mono">{value.gstin}</p>
+            </div>
+          </div>
+        ) : (
+          <span className="text-gray-400">Click to select a seller...</span>
+        )}
+        <ChevronDown size={20} className={`text-gray-400 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
       </div>
-      
-      {isEditing ? (
-        <div className="flex items-center space-x-2">
-          <input
-            type={type}
-            value={editValue}
-            onChange={(e) => setEditValue(e.target.value)}
-            className="flex-1 px-3 py-2 border border-blue-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-            autoFocus
-          />
-          <button 
-            onClick={() => { onChange(editValue); setIsEditing(false); }}
-            className="p-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-          >
-            <Check size={16} />
-          </button>
-          <button 
-            onClick={() => { setEditValue(value); setIsEditing(false); }}
-            className="p-2 bg-gray-200 text-gray-600 rounded-lg hover:bg-gray-300"
-          >
-            <X size={16} />
-          </button>
-        </div>
-      ) : (
-        <div className="flex items-center justify-between group">
-          <span className={`text-gray-800 ${type === 'currency' ? 'font-semibold text-lg' : ''}`}>
-            {type === 'currency' ? `₹${parseFloat(value).toLocaleString('en-IN')}` : value}
-          </span>
-          <button 
-            onClick={() => setIsEditing(true)}
-            className="opacity-0 group-hover:opacity-100 p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded transition"
-          >
-            <Edit2 size={14} />
-          </button>
+
+      {isOpen && (
+        <div
+          className="absolute left-0 right-0 mt-1 bg-white border border-gray-200 rounded-xl shadow-2xl"
+          style={{ zIndex: 9999, top: '100%' }}
+        >
+          {/* Search Input */}
+          <div className="p-3 border-b border-gray-100 bg-gray-50 rounded-t-xl">
+            <div className="relative">
+              <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+              <input
+                type="text"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Type to search by name or GSTIN..."
+                className="w-full pl-10 pr-4 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white"
+                autoFocus
+                onClick={(e) => e.stopPropagation()}
+              />
+            </div>
+          </div>
+
+          {/* Sellers List */}
+          <div className="max-h-72 overflow-y-auto">
+            {fetchError ? (
+              <div className="py-6 text-center text-red-500">
+                <AlertCircle size={24} className="mx-auto mb-2" />
+                <p className="text-sm font-medium">Failed to load sellers</p>
+                <p className="text-xs mt-1">{fetchError}</p>
+                <button
+                  onClick={() => fetchSellers('')}
+                  className="mt-2 text-blue-600 text-sm hover:underline"
+                >
+                  Try again
+                </button>
+              </div>
+            ) : loading ? (
+              <div className="py-8 text-center text-gray-500">
+                <Loader2 size={24} className="animate-spin mx-auto mb-2" />
+                <p className="text-sm">Loading sellers...</p>
+              </div>
+            ) : sellers.length > 0 ? (
+              <div className="py-1">
+                <div className="px-4 py-2 text-xs font-medium text-gray-500 uppercase tracking-wider bg-gray-50">
+                  Available Sellers ({sellers.length})
+                </div>
+                {sellers.map((seller) => (
+                  <div
+                    key={seller.id}
+                    className="px-4 py-3 hover:bg-blue-50 cursor-pointer flex items-center justify-between border-b border-gray-50 last:border-0"
+                    onClick={() => handleSelect(seller)}
+                  >
+                    <div className="flex items-center space-x-3">
+                      <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
+                        <Building2 size={18} className="text-blue-600" />
+                      </div>
+                      <div>
+                        <p className="font-medium text-gray-800">{seller.companyName}</p>
+                        <p className="text-xs text-gray-500">
+                          {seller.gstin ? (
+                            <span className="font-mono bg-gray-100 px-1.5 py-0.5 rounded">{seller.gstin}</span>
+                          ) : (
+                            <span className="text-gray-400">No GSTIN</span>
+                          )}
+                          {seller.city && <span className="ml-2">{seller.city}, {seller.state}</span>}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      {seller.kycStatus === 'APPROVED' && (
+                        <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full">Verified</span>
+                      )}
+                      <ChevronDown size={16} className="text-gray-300 -rotate-90" />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="py-8 text-center">
+                <Building2 size={32} className="text-gray-300 mx-auto mb-3" />
+                <p className="text-gray-500 font-medium mb-1">No sellers found</p>
+                <p className="text-sm text-gray-400">
+                  {search ? `No results for "${search}"` : 'No verified sellers available'}
+                </p>
+              </div>
+            )}
+          </div>
+
+          {/* Add New Seller Button */}
+          <div className="p-3 border-t border-gray-200 bg-gray-50">
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); setIsOpen(false); onAddNew(); }}
+              className="w-full flex items-center justify-center space-x-2 px-4 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition font-medium"
+            >
+              <UserPlus size={18} />
+              <span>Invite New Seller</span>
+            </button>
+            <p className="text-xs text-gray-500 text-center mt-2">
+              Can't find your seller? Send them an invitation to join.
+            </p>
+          </div>
         </div>
       )}
-      
-      {warning && (
-        <p className="mt-1 text-xs text-red-600 flex items-center">
-          <AlertCircle size={12} className="mr-1" />
-          {warning}
-        </p>
-      )}
+    </div>
+  );
+};
+
+// Line Item Row Component
+const LineItemRow = ({ item, index, onChange, onRemove, canRemove }) => {
+  const handleChange = (field, value) => {
+    const updated = { ...item, [field]: value };
+    // Auto-calculate amount
+    if (field === 'quantity' || field === 'rate') {
+      const qty = parseFloat(updated.quantity) || 0;
+      const rate = parseFloat(updated.rate) || 0;
+      updated.amount = (qty * rate).toFixed(2);
+    }
+    onChange(index, updated);
+  };
+
+  return (
+    <div className="grid grid-cols-12 gap-3 items-start py-3 border-b border-gray-100 last:border-0">
+      <div className="col-span-4">
+        <input
+          type="text"
+          value={item.description}
+          onChange={(e) => handleChange('description', e.target.value)}
+          placeholder="Item description"
+          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm"
+        />
+      </div>
+      <div className="col-span-2">
+        <input
+          type="text"
+          value={item.hsnCode}
+          onChange={(e) => handleChange('hsnCode', e.target.value)}
+          placeholder="HSN Code"
+          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm font-mono"
+        />
+      </div>
+      <div className="col-span-2">
+        <input
+          type="number"
+          value={item.quantity}
+          onChange={(e) => handleChange('quantity', e.target.value)}
+          placeholder="Qty"
+          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm text-right"
+        />
+      </div>
+      <div className="col-span-2">
+        <input
+          type="number"
+          value={item.rate}
+          onChange={(e) => handleChange('rate', e.target.value)}
+          placeholder="Rate"
+          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm text-right"
+        />
+      </div>
+      <div className="col-span-1">
+        <input
+          type="text"
+          value={item.amount}
+          readOnly
+          className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm text-right font-medium"
+        />
+      </div>
+      <div className="col-span-1 flex justify-center">
+        {canRemove && (
+          <button
+            type="button"
+            onClick={() => onRemove(index)}
+            className="p-2 text-red-500 hover:bg-red-50 rounded-lg transition"
+          >
+            <Trash2 size={16} />
+          </button>
+        )}
+      </div>
+    </div>
+  );
+};
+
+// Seller Referral Modal
+const SellerReferralModal = ({ isOpen, onClose, onSubmit }) => {
+  const [formData, setFormData] = useState({
+    companyName: '',
+    email: '',
+    gstin: '',
+    contactPhone: '',
+  });
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+  const [success, setSuccess] = useState(false);
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+    setError(null);
+
+    try {
+      await profileService.createSellerReferral(formData);
+      setSuccess(true);
+      setTimeout(() => {
+        onSubmit(formData);
+        onClose();
+      }, 1500);
+    } catch (err) {
+      setError(err.message || 'Failed to send invitation');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+      <div className="bg-white rounded-2xl max-w-md w-full mx-4 overflow-hidden">
+        <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
+          <h3 className="text-lg font-semibold text-gray-800">Invite New Seller</h3>
+          <button onClick={onClose} className="p-1 hover:bg-gray-100 rounded-lg">
+            <X size={20} className="text-gray-500" />
+          </button>
+        </div>
+
+        {success ? (
+          <div className="p-8 text-center">
+            <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+              <CheckCircle size={32} className="text-green-600" />
+            </div>
+            <h4 className="text-lg font-semibold text-gray-800 mb-2">Invitation Sent!</h4>
+            <p className="text-gray-600">The seller will receive an email to join the platform.</p>
+          </div>
+        ) : (
+          <form onSubmit={handleSubmit} className="p-6 space-y-4">
+            <p className="text-sm text-gray-600 mb-4">
+              Invite your seller to join CredInvoice. They'll need to complete KYC before you can create invoices with them.
+            </p>
+
+            <FormField label="Company Name" required>
+              <input
+                type="text"
+                value={formData.companyName}
+                onChange={(e) => setFormData({ ...formData, companyName: e.target.value })}
+                className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                placeholder="e.g., ABC Textiles Pvt Ltd"
+                required
+              />
+            </FormField>
+
+            <FormField label="Email" required>
+              <input
+                type="email"
+                value={formData.email}
+                onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                placeholder="seller@company.com"
+                required
+              />
+            </FormField>
+
+            <FormField label="GSTIN" hint="Optional but helps identify the seller">
+              <input
+                type="text"
+                value={formData.gstin}
+                onChange={(e) => setFormData({ ...formData, gstin: e.target.value.toUpperCase() })}
+                className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 font-mono"
+                placeholder="22AAAAA0000A1Z5"
+                maxLength={15}
+              />
+            </FormField>
+
+            <FormField label="Contact Phone" hint="Optional">
+              <input
+                type="tel"
+                value={formData.contactPhone}
+                onChange={(e) => setFormData({ ...formData, contactPhone: e.target.value })}
+                className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                placeholder="9876543210"
+              />
+            </FormField>
+
+            {error && (
+              <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
+                {error}
+              </div>
+            )}
+
+            <div className="flex space-x-3 pt-2">
+              <button
+                type="button"
+                onClick={onClose}
+                className="flex-1 px-4 py-2.5 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={loading || !formData.companyName || !formData.email}
+                className="flex-1 px-4 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center justify-center space-x-2"
+              >
+                {loading ? <Loader2 size={18} className="animate-spin" /> : <Send size={18} />}
+                <span>{loading ? 'Sending...' : 'Send Invitation'}</span>
+              </button>
+            </div>
+          </form>
+        )}
+      </div>
     </div>
   );
 };
 
 export default function CreateInvoice() {
   const navigate = useNavigate();
-  const [currentStep, setCurrentStep] = useState(0);
-  const [uploadedFile, setUploadedFile] = useState(null);
-  const [isExtracting, setIsExtracting] = useState(false);
-  const [extractionComplete, setExtractionComplete] = useState(false);
-  const [extractedData, setExtractedData] = useState(null);
-  const [discountSettings, setDiscountSettings] = useState({
-    discountType: 'fixed',
-    discountPercent: '2.0',
-    earlyPaymentDate: '2025-01-15',
-  });
-  const [fundingChoice, setFundingChoice] = useState('later');
-  const [selectedFinanciers, setSelectedFinanciers] = useState([]);
-  const [selectedSeller, setSelectedSeller] = useState(null);
-  const [isDragging, setIsDragging] = useState(false);
-  const [entryMode, setEntryMode] = useState(null); // 'ai' or 'manual'
-  const [manualData, setManualData] = useState({
+  const { user, profile } = useAuth();
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState(null);
+  const [showReferralModal, setShowReferralModal] = useState(false);
+  const [errors, setErrors] = useState({});
+
+  // Get buyer info from profile
+  const buyerInfo = profile?.buyer || {};
+
+  // Form state
+  const [invoiceData, setInvoiceData] = useState({
     invoiceNumber: '',
     invoiceDate: new Date().toISOString().split('T')[0],
     dueDate: '',
-    sellerName: '',
-    sellerGstin: '',
-    buyerName: '',
-    buyerGstin: '',
+    productType: 'DD_EARLY_PAYMENT',
+  });
+
+  const [selectedSeller, setSelectedSeller] = useState(null);
+
+  const [lineItems, setLineItems] = useState([
+    { description: '', hsnCode: '', quantity: '', rate: '', amount: '0.00' }
+  ]);
+
+  const [amounts, setAmounts] = useState({
     subtotal: '',
-    taxAmount: '',
+    cgst: '',
+    sgst: '',
+    igst: '',
     totalAmount: '',
   });
 
-  const getSteps = () => {
-    if (entryMode === 'manual') {
-      return [
-        { id: 'entry', label: 'Invoice Details' },
-        { id: 'discount', label: 'Set Discount' },
-        { id: 'review', label: 'Review & Submit' },
-      ];
+  const [attachments, setAttachments] = useState([]);
+
+  // Calculate totals from line items
+  useEffect(() => {
+    const subtotal = lineItems.reduce((sum, item) => sum + (parseFloat(item.amount) || 0), 0);
+    const cgst = parseFloat(amounts.cgst) || 0;
+    const sgst = parseFloat(amounts.sgst) || 0;
+    const igst = parseFloat(amounts.igst) || 0;
+    const total = subtotal + cgst + sgst + igst;
+
+    setAmounts(prev => ({
+      ...prev,
+      subtotal: subtotal.toFixed(2),
+      totalAmount: total.toFixed(2),
+    }));
+  }, [lineItems, amounts.cgst, amounts.sgst, amounts.igst]);
+
+  const handleAddLineItem = () => {
+    setLineItems([...lineItems, { description: '', hsnCode: '', quantity: '', rate: '', amount: '0.00' }]);
+  };
+
+  const handleUpdateLineItem = (index, item) => {
+    const updated = [...lineItems];
+    updated[index] = item;
+    setLineItems(updated);
+  };
+
+  const handleRemoveLineItem = (index) => {
+    setLineItems(lineItems.filter((_, i) => i !== index));
+  };
+
+  const handleFileUpload = (e) => {
+    const files = Array.from(e.target.files);
+    const newAttachments = files.map(file => ({
+      file,
+      name: file.name,
+      size: file.size,
+      type: file.type,
+    }));
+    setAttachments([...attachments, ...newAttachments]);
+  };
+
+  const handleRemoveAttachment = (index) => {
+    setAttachments(attachments.filter((_, i) => i !== index));
+  };
+
+  const validateForm = () => {
+    const newErrors = {};
+
+    if (!invoiceData.invoiceNumber) newErrors.invoiceNumber = 'Invoice number is required';
+    if (!invoiceData.invoiceDate) newErrors.invoiceDate = 'Invoice date is required';
+    if (!invoiceData.dueDate) newErrors.dueDate = 'Due date is required';
+    if (!selectedSeller) newErrors.seller = 'Please select a seller';
+    if (!amounts.totalAmount || parseFloat(amounts.totalAmount) <= 0) {
+      newErrors.totalAmount = 'Total amount must be greater than 0';
     }
-    return [
-      { id: 'upload', label: 'Upload Invoice' },
-      { id: 'extract', label: 'AI Extraction' },
-      { id: 'discount', label: 'Set Discount' },
-      { id: 'review', label: 'Review & Submit' },
-    ];
+
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
   };
 
-  const steps = getSteps();
+  const handleSubmit = async (asDraft = false) => {
+    if (!asDraft && !validateForm()) return;
 
-  const mappedSellers = [
-    { id: 1, name: 'Kumar Textiles Pvt Ltd', gstin: '27AABCU9603R1ZM' },
-    { id: 2, name: 'Steel Corp India', gstin: '29GGGGG1314R9Z6' },
-    { id: 3, name: 'Auto Parts Ltd', gstin: '33AABCT1332L1ZZ' },
-    { id: 4, name: 'Fabric House', gstin: '27AAAAA0000A1Z5' },
-  ];
-
-  const availableFinanciers = [
-    { id: 1, name: 'HDFC Bank', type: 'Bank' },
-    { id: 2, name: 'Urban Finance Ltd', type: 'NBFC' },
-    { id: 3, name: 'ICICI Bank', type: 'Bank' },
-    { id: 4, name: 'Bajaj Finance', type: 'NBFC' },
-  ];
-
-  const mockExtractedData = {
-    invoiceNumber: { value: 'INV-2024-0078', confidence: 98 },
-    invoiceDate: { value: '2024-12-28', confidence: 95 },
-    dueDate: { value: '2025-02-28', confidence: 92 },
-    sellerName: { value: 'Kumar Textiles Pvt Ltd', confidence: 96 },
-    sellerGstin: { value: '27AABCU9603R1ZM', confidence: 99 },
-    buyerName: { value: 'Ansai Mart', confidence: 97 },
-    buyerGstin: { value: '27AABCU9603R1ZN', confidence: 98 },
-    subtotal: { value: '245000', confidence: 94 },
-    cgst: { value: '22050', confidence: 91 },
-    sgst: { value: '22050', confidence: 91 },
-    totalAmount: { value: '289100', confidence: 96 },
-    hsnCode: { value: '5208', confidence: 78, warning: 'Low confidence - please verify' },
-    overallConfidence: 92.5,
-    validationResults: [
-      { rule: 'GSTIN Format', passed: true },
-      { rule: 'Date Validation', passed: true },
-      { rule: 'Amount Calculation', passed: true },
-      { rule: 'Duplicate Check', passed: true },
-    ]
-  };
-
-  const handleFileUpload = useCallback((file) => {
-    if (file && (file.type === 'application/pdf' || file.type.startsWith('image/'))) {
-      setUploadedFile(file);
-    }
-  }, []);
-
-  const handleDragOver = (e) => { e.preventDefault(); setIsDragging(true); };
-  const handleDragLeave = () => { setIsDragging(false); };
-  const handleDrop = (e) => {
-    e.preventDefault();
-    setIsDragging(false);
-    const file = e.dataTransfer.files[0];
-    handleFileUpload(file);
-  };
-
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [submitError, setSubmitError] = useState(null);
-
-  const startExtraction = async () => {
-    setIsExtracting(true);
-    setCurrentStep(1);
-
-    try {
-      // Try to use the real API extraction
-      const result = await invoiceService.extractFromFile(uploadedFile);
-      if (result.data) {
-        // Map API response to our format
-        const data = result.data;
-        setExtractedData({
-          invoiceNumber: { value: data.invoiceNumber || '', confidence: data.confidence?.invoiceNumber || 95 },
-          invoiceDate: { value: data.invoiceDate || '', confidence: data.confidence?.invoiceDate || 90 },
-          dueDate: { value: data.dueDate || '', confidence: data.confidence?.dueDate || 90 },
-          sellerName: { value: data.sellerName || '', confidence: data.confidence?.sellerName || 85 },
-          sellerGstin: { value: data.sellerGstin || '', confidence: data.confidence?.sellerGstin || 95 },
-          buyerName: { value: data.buyerName || '', confidence: data.confidence?.buyerName || 90 },
-          buyerGstin: { value: data.buyerGstin || '', confidence: data.confidence?.buyerGstin || 95 },
-          subtotal: { value: String(data.subtotal || 0), confidence: data.confidence?.subtotal || 90 },
-          taxAmount: { value: String(data.taxAmount || 0), confidence: data.confidence?.taxAmount || 90 },
-          totalAmount: { value: String(data.totalAmount || 0), confidence: data.confidence?.totalAmount || 95 },
-          overallConfidence: data.overallConfidence || 90,
-          validationResults: data.validationResults || [
-            { rule: 'GSTIN Format', passed: true },
-            { rule: 'Date Validation', passed: true },
-            { rule: 'Amount Calculation', passed: true },
-          ]
-        });
-        setExtractionComplete(true);
-      }
-    } catch (error) {
-      console.error('AI extraction failed, using mock data:', error);
-      // Fall back to mock data for demo purposes
-      setExtractedData(mockExtractedData);
-      setExtractionComplete(true);
-      const matchedSeller = mappedSellers.find(s => s.gstin === mockExtractedData.sellerGstin.value);
-      if (matchedSeller) setSelectedSeller(matchedSeller);
-    } finally {
-      setIsExtracting(false);
-    }
-  };
-
-  const handleSubmit = async () => {
     setIsSubmitting(true);
     setSubmitError(null);
 
     try {
-      const invoiceData = {
-        invoiceNumber: extractedData.invoiceNumber.value,
-        invoiceDate: extractedData.invoiceDate.value,
-        dueDate: extractedData.dueDate.value,
-        sellerGstin: extractedData.sellerGstin.value,
-        sellerName: extractedData.sellerName.value,
-        buyerGstin: extractedData.buyerGstin?.value || '',
-        buyerName: extractedData.buyerName?.value || '',
-        subtotal: parseFloat(extractedData.subtotal.value) || 0,
-        taxAmount: parseFloat(extractedData.taxAmount?.value || extractedData.cgst?.value || 0) +
-                   parseFloat(extractedData.sgst?.value || 0),
-        totalAmount: parseFloat(extractedData.totalAmount.value) || 0,
-        discountPercentage: parseFloat(discountSettings.discountPercent) || 0,
-        earlyPaymentDate: discountSettings.earlyPaymentDate,
-        productType: fundingChoice === 'self' ? 'DD_SELF_FUNDED' : 'DD_EARLY_PAYMENT',
+      const data = {
+        invoiceNumber: invoiceData.invoiceNumber,
+        invoiceDate: invoiceData.invoiceDate,
+        dueDate: invoiceData.dueDate,
+        sellerGstin: selectedSeller?.gstin || '',
+        sellerName: selectedSeller?.companyName || '',
+        buyerGstin: buyerInfo.gstin || '',
+        buyerName: buyerInfo.companyName || '',
+        subtotal: parseFloat(amounts.subtotal) || 0,
+        taxAmount: (parseFloat(amounts.cgst) || 0) + (parseFloat(amounts.sgst) || 0) + (parseFloat(amounts.igst) || 0),
+        totalAmount: parseFloat(amounts.totalAmount) || 0,
+        productType: invoiceData.productType,
       };
 
-      const response = await invoiceService.create(invoiceData);
+      const response = await invoiceService.create(data);
 
-      if (response.data && fundingChoice !== 'later') {
-        // Submit the invoice after creation
+      if (!asDraft && response.data) {
         await invoiceService.submit(response.data.id);
       }
 
@@ -301,768 +579,353 @@ export default function CreateInvoice() {
     }
   };
 
-  const handleSaveDraft = async () => {
-    setIsSubmitting(true);
-    setSubmitError(null);
-
-    try {
-      const invoiceData = {
-        invoiceNumber: extractedData?.invoiceNumber?.value || '',
-        invoiceDate: extractedData?.invoiceDate?.value || new Date().toISOString().split('T')[0],
-        dueDate: extractedData?.dueDate?.value || '',
-        sellerGstin: extractedData?.sellerGstin?.value || '',
-        sellerName: extractedData?.sellerName?.value || '',
-        subtotal: parseFloat(extractedData?.subtotal?.value) || 0,
-        taxAmount: parseFloat(extractedData?.taxAmount?.value || 0),
-        totalAmount: parseFloat(extractedData?.totalAmount?.value) || 0,
-        discountPercentage: parseFloat(discountSettings.discountPercent) || 0,
-        productType: 'DD_EARLY_PAYMENT',
-      };
-
-      await invoiceService.create(invoiceData);
-      navigate('/invoices');
-    } catch (error) {
-      console.error('Failed to save draft:', error);
-      setSubmitError(error.message || 'Failed to save draft');
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  // Convert manual data to extracted data format
-  const convertManualToExtracted = () => {
-    setExtractedData({
-      invoiceNumber: { value: manualData.invoiceNumber, confidence: 100 },
-      invoiceDate: { value: manualData.invoiceDate, confidence: 100 },
-      dueDate: { value: manualData.dueDate, confidence: 100 },
-      sellerName: { value: manualData.sellerName, confidence: 100 },
-      sellerGstin: { value: manualData.sellerGstin, confidence: 100 },
-      buyerName: { value: manualData.buyerName, confidence: 100 },
-      buyerGstin: { value: manualData.buyerGstin, confidence: 100 },
-      subtotal: { value: manualData.subtotal, confidence: 100 },
-      taxAmount: { value: manualData.taxAmount, confidence: 100 },
-      totalAmount: { value: manualData.totalAmount, confidence: 100 },
-      overallConfidence: 100,
-      validationResults: [
-        { rule: 'Manual Entry', passed: true },
-      ]
-    });
-    setExtractionComplete(true);
-  };
-
-  // Handle manual entry mode selection
-  const handleManualEntry = () => {
-    setEntryMode('manual');
-    setCurrentStep(0);
-  };
-
-  // Handle AI extraction mode selection
-  const handleAIEntry = () => {
-    setEntryMode('ai');
-  };
-
-  // Calculate total from subtotal and tax
-  const updateTotalAmount = (subtotal, tax) => {
-    const total = (parseFloat(subtotal) || 0) + (parseFloat(tax) || 0);
-    setManualData(prev => ({ ...prev, totalAmount: total.toString() }));
-  };
-
-  const renderStepContent = () => {
-    // Manual entry form (when entryMode is 'manual')
-    if (entryMode === 'manual' && currentStep === 0) {
-      return (
-        <div className="max-w-3xl mx-auto">
-          <div className="bg-white rounded-xl border border-gray-200 p-6">
-            <div className="flex items-center justify-between mb-6">
-              <h3 className="text-lg font-semibold text-gray-800">Enter Invoice Details</h3>
-              <button
-                onClick={() => { setEntryMode(null); setCurrentStep(0); }}
-                className="text-sm text-blue-600 hover:text-blue-700"
-              >
-                ← Back to options
-              </button>
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Invoice Number *</label>
-                <input
-                  type="text"
-                  value={manualData.invoiceNumber}
-                  onChange={(e) => setManualData({ ...manualData, invoiceNumber: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                  placeholder="e.g., INV-2024-001"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Invoice Date *</label>
-                <input
-                  type="date"
-                  value={manualData.invoiceDate}
-                  onChange={(e) => setManualData({ ...manualData, invoiceDate: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
-              <div className="col-span-2">
-                <label className="block text-sm font-medium text-gray-700 mb-1">Due Date *</label>
-                <input
-                  type="date"
-                  value={manualData.dueDate}
-                  onChange={(e) => setManualData({ ...manualData, dueDate: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
-            </div>
-
-            <hr className="my-6" />
-
-            <h4 className="font-medium text-gray-800 mb-4">Seller Information</h4>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Seller Name *</label>
-                <input
-                  type="text"
-                  value={manualData.sellerName}
-                  onChange={(e) => setManualData({ ...manualData, sellerName: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                  placeholder="e.g., Kumar Textiles Pvt Ltd"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Seller GSTIN *</label>
-                <input
-                  type="text"
-                  value={manualData.sellerGstin}
-                  onChange={(e) => setManualData({ ...manualData, sellerGstin: e.target.value.toUpperCase() })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 font-mono"
-                  placeholder="e.g., 27AABCU9603R1ZM"
-                  maxLength={15}
-                />
-              </div>
-            </div>
-
-            <hr className="my-6" />
-
-            <h4 className="font-medium text-gray-800 mb-4">Buyer Information (Your Company)</h4>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Buyer Name</label>
-                <input
-                  type="text"
-                  value={manualData.buyerName}
-                  onChange={(e) => setManualData({ ...manualData, buyerName: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                  placeholder="Your company name"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Buyer GSTIN</label>
-                <input
-                  type="text"
-                  value={manualData.buyerGstin}
-                  onChange={(e) => setManualData({ ...manualData, buyerGstin: e.target.value.toUpperCase() })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 font-mono"
-                  placeholder="Your GSTIN"
-                  maxLength={15}
-                />
-              </div>
-            </div>
-
-            <hr className="my-6" />
-
-            <h4 className="font-medium text-gray-800 mb-4">Amount Details</h4>
-            <div className="grid grid-cols-3 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Subtotal (₹) *</label>
-                <input
-                  type="number"
-                  value={manualData.subtotal}
-                  onChange={(e) => {
-                    setManualData({ ...manualData, subtotal: e.target.value });
-                    updateTotalAmount(e.target.value, manualData.taxAmount);
-                  }}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                  placeholder="0.00"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Tax Amount (₹)</label>
-                <input
-                  type="number"
-                  value={manualData.taxAmount}
-                  onChange={(e) => {
-                    setManualData({ ...manualData, taxAmount: e.target.value });
-                    updateTotalAmount(manualData.subtotal, e.target.value);
-                  }}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                  placeholder="0.00"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Total Amount (₹) *</label>
-                <input
-                  type="number"
-                  value={manualData.totalAmount}
-                  onChange={(e) => setManualData({ ...manualData, totalAmount: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 font-semibold"
-                  placeholder="0.00"
-                />
-              </div>
-            </div>
-
-            <div className="mt-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-              <div className="flex items-start space-x-2">
-                <Info size={18} className="text-blue-600 mt-0.5" />
-                <div className="text-sm text-blue-700">
-                  <p className="font-medium">Required fields are marked with *</p>
-                  <p>Make sure all details match your invoice document for accurate processing.</p>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      );
-    }
-
-    switch (currentStep) {
-      case 0:
-        // Entry mode selection (initial state)
-        if (!entryMode) {
-          return (
-            <div className="max-w-3xl mx-auto">
-              <div className="text-center mb-8">
-                <h2 className="text-2xl font-bold text-gray-800 mb-2">How would you like to create the invoice?</h2>
-                <p className="text-gray-500">Choose between AI-powered extraction or manual entry</p>
-              </div>
-
-              <div className="grid grid-cols-2 gap-6">
-                {/* AI Extraction Option */}
-                <div
-                  onClick={handleAIEntry}
-                  className="bg-white border-2 border-gray-200 rounded-xl p-8 cursor-pointer hover:border-blue-500 hover:shadow-lg transition-all group"
-                >
-                  <div className="w-16 h-16 bg-blue-100 rounded-xl flex items-center justify-center mx-auto mb-4 group-hover:bg-blue-200 transition">
-                    <Sparkles size={32} className="text-blue-600" />
-                  </div>
-                  <h3 className="text-lg font-semibold text-gray-800 text-center mb-2">AI Extraction</h3>
-                  <p className="text-sm text-gray-500 text-center mb-4">
-                    Upload your invoice and let AI extract all the details automatically
-                  </p>
-                  <ul className="text-sm text-gray-600 space-y-2">
-                    <li className="flex items-center space-x-2">
-                      <Check size={16} className="text-green-500" />
-                      <span>Automatic data extraction</span>
-                    </li>
-                    <li className="flex items-center space-x-2">
-                      <Check size={16} className="text-green-500" />
-                      <span>Confidence scores</span>
-                    </li>
-                    <li className="flex items-center space-x-2">
-                      <Check size={16} className="text-green-500" />
-                      <span>GSTIN validation</span>
-                    </li>
-                  </ul>
-                  <div className="mt-4 p-2 bg-yellow-50 border border-yellow-200 rounded-lg">
-                    <p className="text-xs text-yellow-700 text-center">
-                      <AlertCircle size={12} className="inline mr-1" />
-                      AI feature coming soon - uses demo data for now
-                    </p>
-                  </div>
-                </div>
-
-                {/* Manual Entry Option */}
-                <div
-                  onClick={handleManualEntry}
-                  className="bg-white border-2 border-gray-200 rounded-xl p-8 cursor-pointer hover:border-green-500 hover:shadow-lg transition-all group"
-                >
-                  <div className="w-16 h-16 bg-green-100 rounded-xl flex items-center justify-center mx-auto mb-4 group-hover:bg-green-200 transition">
-                    <PenLine size={32} className="text-green-600" />
-                  </div>
-                  <h3 className="text-lg font-semibold text-gray-800 text-center mb-2">Manual Entry</h3>
-                  <p className="text-sm text-gray-500 text-center mb-4">
-                    Enter invoice details manually using a simple form
-                  </p>
-                  <ul className="text-sm text-gray-600 space-y-2">
-                    <li className="flex items-center space-x-2">
-                      <Check size={16} className="text-green-500" />
-                      <span>Full control over data</span>
-                    </li>
-                    <li className="flex items-center space-x-2">
-                      <Check size={16} className="text-green-500" />
-                      <span>No file upload needed</span>
-                    </li>
-                    <li className="flex items-center space-x-2">
-                      <Check size={16} className="text-green-500" />
-                      <span>Quick and simple</span>
-                    </li>
-                  </ul>
-                  <div className="mt-4 p-2 bg-green-50 border border-green-200 rounded-lg">
-                    <p className="text-xs text-green-700 text-center">
-                      <Check size={12} className="inline mr-1" />
-                      Recommended for quick invoice creation
-                    </p>
-                  </div>
-                </div>
-              </div>
-            </div>
-          );
-        }
-
-        // AI mode - file upload
-        return (
-          <div className="max-w-2xl mx-auto">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold text-gray-800">Upload Invoice for AI Extraction</h3>
-              <button
-                onClick={() => { setEntryMode(null); setUploadedFile(null); }}
-                className="text-sm text-blue-600 hover:text-blue-700"
-              >
-                ← Back to options
-              </button>
-            </div>
-            <div
-              className={`border-2 border-dashed rounded-xl p-12 text-center transition-all
-                ${isDragging ? 'border-blue-500 bg-blue-50' : 'border-gray-300 hover:border-gray-400'}
-                ${uploadedFile ? 'border-green-500 bg-green-50' : ''}`}
-              onDragOver={handleDragOver}
-              onDragLeave={handleDragLeave}
-              onDrop={handleDrop}
-            >
-              {uploadedFile ? (
-                <div className="space-y-4">
-                  <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto">
-                    <CheckCircle size={32} className="text-green-600" />
-                  </div>
-                  <div>
-                    <p className="text-lg font-medium text-gray-800">{uploadedFile.name}</p>
-                    <p className="text-sm text-gray-500">{(uploadedFile.size / 1024 / 1024).toFixed(2)} MB</p>
-                  </div>
-                  <div className="flex items-center justify-center space-x-3">
-                    <button onClick={() => setUploadedFile(null)} className="text-red-600 hover:text-red-700 text-sm font-medium">
-                      Remove
-                    </button>
-                    <button onClick={startExtraction} className="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 flex items-center space-x-2">
-                      <Sparkles size={18} />
-                      <span>Extract with AI</span>
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                <div className="space-y-4">
-                  <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto">
-                    <Upload size={32} className="text-gray-400" />
-                  </div>
-                  <div>
-                    <p className="text-lg font-medium text-gray-800">
-                      {isDragging ? 'Drop your invoice here' : 'Drag & drop your invoice'}
-                    </p>
-                    <p className="text-sm text-gray-500">or click to browse</p>
-                  </div>
-                  <input
-                    type="file"
-                    accept=".pdf,image/*"
-                    onChange={(e) => handleFileUpload(e.target.files[0])}
-                    className="hidden"
-                    id="file-upload"
-                  />
-                  <label htmlFor="file-upload" className="inline-block bg-white border border-gray-300 text-gray-700 px-6 py-2 rounded-lg hover:bg-gray-50 cursor-pointer">
-                    Browse Files
-                  </label>
-                  <p className="text-xs text-gray-400">Supported: PDF, JPEG, PNG (Max 10MB)</p>
-                </div>
-              )}
-            </div>
-          </div>
-        );
-
-      case 1:
-        return (
-          <div className="max-w-5xl mx-auto">
-            {isExtracting ? (
-              <div className="text-center py-16">
-                <div className="w-20 h-20 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-6 animate-pulse">
-                  <Sparkles size={40} className="text-blue-600" />
-                </div>
-                <h3 className="text-xl font-semibold text-gray-800 mb-2">AI is extracting invoice data...</h3>
-                <p className="text-gray-500 mb-6">This usually takes 10-30 seconds</p>
-                <div className="max-w-md mx-auto">
-                  <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
-                    <div className="h-full bg-blue-600 rounded-full animate-pulse" style={{width: '70%'}}></div>
-                  </div>
-                </div>
-              </div>
-            ) : extractionComplete && extractedData && (
-              <div className="grid grid-cols-2 gap-6">
-                {/* Document Preview */}
-                <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-                  <div className="px-4 py-3 border-b border-gray-200 flex items-center justify-between bg-gray-50">
-                    <span className="font-medium text-gray-700">Invoice Preview</span>
-                    <div className="flex items-center space-x-2">
-                      <button className="p-1.5 hover:bg-gray-200 rounded"><ZoomOut size={16} /></button>
-                      <button className="p-1.5 hover:bg-gray-200 rounded"><ZoomIn size={16} /></button>
-                      <button className="p-1.5 hover:bg-gray-200 rounded"><RotateCw size={16} /></button>
-                    </div>
-                  </div>
-                  <div className="h-[500px] bg-gray-100 flex items-center justify-center">
-                    <div className="text-center text-gray-500">
-                      <FileText size={48} className="mx-auto mb-2 opacity-50" />
-                      <p>Invoice Preview</p>
-                      <p className="text-sm">{uploadedFile?.name}</p>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Extracted Data */}
-                <div className="space-y-4">
-                  <div className="bg-white rounded-xl border border-gray-200 p-4">
-                    <div className="flex items-center justify-between mb-4">
-                      <div className="flex items-center space-x-3">
-                        <div className="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center">
-                          <CheckCircle size={20} className="text-green-600" />
-                        </div>
-                        <div>
-                          <h3 className="font-semibold text-gray-800">Extraction Complete</h3>
-                          <p className="text-sm text-gray-500">Overall confidence: {extractedData.overallConfidence}%</p>
-                        </div>
-                      </div>
-                    </div>
-                    <div className="flex items-center space-x-4 text-sm">
-                      {extractedData.validationResults.map((result, i) => (
-                        <div key={i} className="flex items-center space-x-1">
-                          <CheckCircle size={14} className="text-green-500" />
-                          <span className="text-green-700">{result.rule}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-
-                  <div className="bg-white rounded-xl border border-gray-200 p-4 space-y-3 max-h-[400px] overflow-y-auto">
-                    <h4 className="font-medium text-gray-800 mb-3">Extracted Fields</h4>
-                    <div className="grid grid-cols-2 gap-3">
-                      <ExtractedField label="Invoice Number" value={extractedData.invoiceNumber.value} confidence={extractedData.invoiceNumber.confidence} required onChange={() => {}} />
-                      <ExtractedField label="Invoice Date" value={extractedData.invoiceDate.value} confidence={extractedData.invoiceDate.confidence} required onChange={() => {}} />
-                    </div>
-                    <ExtractedField label="Due Date" value={extractedData.dueDate.value} confidence={extractedData.dueDate.confidence} required onChange={() => {}} />
-                    <ExtractedField label="Seller Name" value={extractedData.sellerName.value} confidence={extractedData.sellerName.confidence} required onChange={() => {}} />
-                    <ExtractedField label="Seller GSTIN" value={extractedData.sellerGstin.value} confidence={extractedData.sellerGstin.confidence} required verified onChange={() => {}} />
-                    <div className="grid grid-cols-2 gap-3">
-                      <ExtractedField label="Subtotal" value={extractedData.subtotal.value} confidence={extractedData.subtotal.confidence} type="currency" onChange={() => {}} />
-                      <ExtractedField label="Total Amount" value={extractedData.totalAmount.value} confidence={extractedData.totalAmount.confidence} required type="currency" onChange={() => {}} />
-                    </div>
-                    <ExtractedField label="HSN Code" value={extractedData.hsnCode.value} confidence={extractedData.hsnCode.confidence} warning={extractedData.hsnCode.warning} onChange={() => {}} />
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
-        );
-
-      case 2:
-        return (
-          <div className="max-w-3xl mx-auto">
-            <div className="bg-white rounded-xl border border-gray-200 p-6">
-              <h3 className="text-lg font-semibold text-gray-800 mb-6">Set Discount Terms</h3>
-              
-              <div className="bg-gray-50 rounded-lg p-4 mb-6">
-                <div className="grid grid-cols-3 gap-4 text-center">
-                  <div>
-                    <p className="text-sm text-gray-500">Invoice Amount</p>
-                    <p className="text-xl font-bold text-gray-800">₹2,89,100</p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-gray-500">Seller</p>
-                    <p className="text-lg font-medium text-gray-800">Kumar Textiles</p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-gray-500">Due Date</p>
-                    <p className="text-lg font-medium text-gray-800">Feb 28, 2025</p>
-                  </div>
-                </div>
-              </div>
-
-              <div className="mb-6">
-                <label className="block text-sm font-medium text-gray-700 mb-2">Discount Percentage</label>
-                <div className="relative">
-                  <input
-                    type="number"
-                    step="0.1"
-                    min="0.1"
-                    max="10"
-                    value={discountSettings.discountPercent}
-                    onChange={(e) => setDiscountSettings({...discountSettings, discountPercent: e.target.value})}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-lg"
-                    placeholder="e.g., 2.0"
-                  />
-                  <span className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-500">%</span>
-                </div>
-              </div>
-
-              <div className="mb-6">
-                <label className="block text-sm font-medium text-gray-700 mb-2">Early Payment Date</label>
-                <div className="relative">
-                  <Calendar size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" />
-                  <input
-                    type="date"
-                    value={discountSettings.earlyPaymentDate}
-                    onChange={(e) => setDiscountSettings({...discountSettings, earlyPaymentDate: e.target.value})}
-                    className="w-full pl-12 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
-              </div>
-
-              {discountSettings.discountPercent && (
-                <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-                  <h4 className="font-medium text-green-800 mb-3">Discount Calculation</h4>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <p className="text-sm text-gray-600">Invoice Amount</p>
-                      <p className="font-semibold text-gray-800">₹2,89,100</p>
-                    </div>
-                    <div>
-                      <p className="text-sm text-gray-600">Discount ({discountSettings.discountPercent}%)</p>
-                      <p className="font-semibold text-green-600">-₹{((289100 * parseFloat(discountSettings.discountPercent || 0)) / 100).toLocaleString('en-IN')}</p>
-                    </div>
-                    <div>
-                      <p className="text-sm text-gray-600">Days Early</p>
-                      <p className="font-semibold text-gray-800">44 days</p>
-                    </div>
-                    <div>
-                      <p className="text-sm text-gray-600">Payment to Seller</p>
-                      <p className="font-bold text-lg text-gray-800">₹{(289100 - (289100 * parseFloat(discountSettings.discountPercent || 0)) / 100).toLocaleString('en-IN')}</p>
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-        );
-
-      case 3:
-        return (
-          <div className="max-w-4xl mx-auto">
-            <div className="grid grid-cols-3 gap-6">
-              <div className="col-span-2 space-y-4">
-                <div className="bg-white rounded-xl border border-gray-200 p-6">
-                  <h3 className="text-lg font-semibold text-gray-800 mb-4">Invoice Summary</h3>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <p className="text-sm text-gray-500">Invoice Number</p>
-                      <p className="font-medium text-gray-800">INV-2024-0078</p>
-                    </div>
-                    <div>
-                      <p className="text-sm text-gray-500">Total Amount</p>
-                      <p className="font-bold text-xl text-gray-800">₹2,89,100</p>
-                    </div>
-                    <div>
-                      <p className="text-sm text-gray-500">Discount Rate</p>
-                      <p className="font-medium text-green-600 text-xl">{discountSettings.discountPercent}%</p>
-                    </div>
-                    <div>
-                      <p className="text-sm text-gray-500">Net Amount to Seller</p>
-                      <p className="font-bold text-xl text-gray-800">₹{(289100 - (289100 * parseFloat(discountSettings.discountPercent || 0)) / 100).toLocaleString('en-IN')}</p>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="bg-white rounded-xl border border-gray-200 p-6">
-                  <h3 className="text-lg font-semibold text-gray-800 mb-4">Funding Selection</h3>
-                  <div className="space-y-3">
-                    {[
-                      { value: 'self', label: 'Self-Funded', desc: 'Pay from your treasury' },
-                      { value: 'financier', label: 'Financier-Funded', desc: 'Send to financiers for bidding' },
-                      { value: 'later', label: 'Decide Later', desc: 'Choose after seller accepts' }
-                    ].map(option => (
-                      <label key={option.value} className={`flex items-center p-4 border-2 rounded-lg cursor-pointer transition ${
-                        fundingChoice === option.value ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:border-gray-300'
-                      }`}>
-                        <input 
-                          type="radio" 
-                          name="funding" 
-                          value={option.value}
-                          checked={fundingChoice === option.value}
-                          onChange={(e) => setFundingChoice(e.target.value)}
-                          className="mr-4"
-                        />
-                        <div>
-                          <p className="font-medium text-gray-800">{option.label}</p>
-                          <p className="text-sm text-gray-500">{option.desc}</p>
-                        </div>
-                      </label>
-                    ))}
-                  </div>
-
-                  {fundingChoice === 'financier' && (
-                    <div className="mt-4 p-4 bg-gray-50 rounded-lg">
-                      <p className="text-sm font-medium text-gray-700 mb-3">Select Financiers</p>
-                      <div className="space-y-2">
-                        {availableFinanciers.map(fin => (
-                          <label key={fin.id} className="flex items-center space-x-3 p-2 hover:bg-white rounded cursor-pointer">
-                            <input 
-                              type="checkbox"
-                              checked={selectedFinanciers.includes(fin.id)}
-                              onChange={(e) => {
-                                if (e.target.checked) {
-                                  setSelectedFinanciers([...selectedFinanciers, fin.id]);
-                                } else {
-                                  setSelectedFinanciers(selectedFinanciers.filter(id => id !== fin.id));
-                                }
-                              }}
-                              className="rounded border-gray-300"
-                            />
-                            <span className="font-medium text-gray-800">{fin.name}</span>
-                            <span className="text-sm text-gray-500">({fin.type})</span>
-                          </label>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              <div className="space-y-4">
-                <div className="bg-blue-50 border border-blue-200 rounded-xl p-6 sticky top-6">
-                  <h4 className="font-semibold text-blue-800 mb-4">Ready to Submit</h4>
-                  <div className="space-y-3 mb-6">
-                    <div className="flex items-center space-x-2 text-sm">
-                      <CheckCircle size={16} className="text-green-500" />
-                      <span className="text-gray-700">Invoice data verified</span>
-                    </div>
-                    <div className="flex items-center space-x-2 text-sm">
-                      <CheckCircle size={16} className="text-green-500" />
-                      <span className="text-gray-700">Seller confirmed</span>
-                    </div>
-                    <div className="flex items-center space-x-2 text-sm">
-                      <CheckCircle size={16} className="text-green-500" />
-                      <span className="text-gray-700">Discount terms set</span>
-                    </div>
-                  </div>
-
-                  {submitError && (
-                    <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
-                      {submitError}
-                    </div>
-                  )}
-
-                  <button
-                    onClick={handleSubmit}
-                    disabled={isSubmitting}
-                    className="w-full bg-blue-600 text-white py-3 rounded-lg font-medium hover:bg-blue-700 flex items-center justify-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    {isSubmitting ? (
-                      <>
-                        <Loader2 size={18} className="animate-spin" />
-                        <span>Submitting...</span>
-                      </>
-                    ) : (
-                      <>
-                        <Send size={18} />
-                        <span>Submit & Send to Seller</span>
-                      </>
-                    )}
-                  </button>
-
-                  <button
-                    onClick={handleSaveDraft}
-                    disabled={isSubmitting}
-                    className="w-full mt-3 border border-gray-300 text-gray-700 py-3 rounded-lg font-medium hover:bg-gray-50 flex items-center justify-center space-x-2 disabled:opacity-50"
-                  >
-                    <Save size={18} />
-                    <span>Save as Draft</span>
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-        );
-
-      default:
-        return null;
-    }
-  };
-
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
-      <div className="bg-white border-b border-gray-200 px-6 py-4">
-        <div className="flex items-center justify-between max-w-6xl mx-auto">
-          <div className="flex items-center space-x-4">
-            <button onClick={() => navigate('/invoices')} className="p-2 hover:bg-gray-100 rounded-lg">
-              <ArrowLeft size={20} className="text-gray-600" />
-            </button>
-            <div>
-              <h1 className="text-xl font-bold text-gray-800">Create Invoice</h1>
-              <p className="text-sm text-gray-500">Dynamic Discounting Workflow</p>
+      <div className="bg-white border-b border-gray-200 sticky top-0 z-40">
+        <div className="max-w-5xl mx-auto px-6 py-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-4">
+              <button onClick={() => navigate('/invoices')} className="p-2 hover:bg-gray-100 rounded-lg">
+                <ArrowLeft size={20} className="text-gray-600" />
+              </button>
+              <div>
+                <h1 className="text-xl font-bold text-gray-800">Create New Invoice</h1>
+                <p className="text-sm text-gray-500">Enter invoice details for dynamic discounting</p>
+              </div>
             </div>
+            <button onClick={() => navigate('/invoices')} className="p-2 hover:bg-gray-100 rounded-lg">
+              <X size={20} className="text-gray-500" />
+            </button>
           </div>
-          <button onClick={() => navigate('/invoices')} className="text-gray-500 hover:text-gray-700">
-            <X size={24} />
-          </button>
         </div>
-      </div>
-
-      {/* Step Indicator */}
-      <div className="bg-white border-b border-gray-200 py-6">
-        <StepIndicator currentStep={currentStep} steps={steps} />
       </div>
 
       {/* Content */}
-      <div className="p-6 pb-24">
-        {renderStepContent()}
+      <div className="max-w-5xl mx-auto px-6 py-8 pb-32">
+        <div className="space-y-6">
+          {/* Invoice Details Section */}
+          <FormSection title="Invoice Details" icon={FileText}>
+            <div className="grid grid-cols-3 gap-6">
+              <FormField label="Invoice Number" required error={errors.invoiceNumber}>
+                <input
+                  type="text"
+                  value={invoiceData.invoiceNumber}
+                  onChange={(e) => setInvoiceData({ ...invoiceData, invoiceNumber: e.target.value })}
+                  placeholder="e.g., INV-2024-001"
+                  className={`w-full px-4 py-2.5 border rounded-lg focus:ring-2 focus:ring-blue-500 ${
+                    errors.invoiceNumber ? 'border-red-300' : 'border-gray-300'
+                  }`}
+                />
+              </FormField>
+              <FormField label="Invoice Date" required error={errors.invoiceDate}>
+                <div className="relative">
+                  <Calendar size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                  <input
+                    type="date"
+                    value={invoiceData.invoiceDate}
+                    onChange={(e) => setInvoiceData({ ...invoiceData, invoiceDate: e.target.value })}
+                    className="w-full pl-10 pr-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+              </FormField>
+              <FormField label="Due Date" required error={errors.dueDate}>
+                <div className="relative">
+                  <Calendar size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                  <input
+                    type="date"
+                    value={invoiceData.dueDate}
+                    onChange={(e) => setInvoiceData({ ...invoiceData, dueDate: e.target.value })}
+                    className="w-full pl-10 pr-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+              </FormField>
+            </div>
+          </FormSection>
+
+          {/* Seller Information Section */}
+          <FormSection title="Seller Information" icon={Building2} allowOverflow={true}>
+            <FormField
+              label="Select Seller"
+              required
+              error={errors.seller}
+              hint="Choose from your verified sellers or invite a new one"
+            >
+              <SellerSearchDropdown
+                value={selectedSeller}
+                onChange={setSelectedSeller}
+                onAddNew={() => setShowReferralModal(true)}
+                error={errors.seller}
+              />
+            </FormField>
+
+            {selectedSeller && (
+              <div className="mt-4 p-4 bg-gray-50 rounded-lg">
+                <div className="grid grid-cols-3 gap-4 text-sm">
+                  <div>
+                    <p className="text-gray-500">Business Type</p>
+                    <p className="font-medium text-gray-800">{selectedSeller.businessType || 'N/A'}</p>
+                  </div>
+                  <div>
+                    <p className="text-gray-500">Location</p>
+                    <p className="font-medium text-gray-800">
+                      {selectedSeller.city && selectedSeller.state
+                        ? `${selectedSeller.city}, ${selectedSeller.state}`
+                        : 'N/A'}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-gray-500">KYC Status</p>
+                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                      <CheckCircle size={12} className="mr-1" /> Verified
+                    </span>
+                  </div>
+                </div>
+              </div>
+            )}
+          </FormSection>
+
+          {/* Buyer Information Section (Pre-filled) */}
+          <FormSection title="Buyer Information (Your Company)" icon={User}>
+            <div className="grid grid-cols-2 gap-6">
+              <FormField label="Company Name">
+                <input
+                  type="text"
+                  value={buyerInfo.companyName || ''}
+                  readOnly
+                  className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-lg text-gray-700"
+                />
+              </FormField>
+              <FormField label="GSTIN">
+                <input
+                  type="text"
+                  value={buyerInfo.gstin || ''}
+                  readOnly
+                  className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-lg text-gray-700 font-mono"
+                />
+              </FormField>
+              <FormField label="Address">
+                <input
+                  type="text"
+                  value={buyerInfo.address || ''}
+                  readOnly
+                  className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-lg text-gray-700"
+                />
+              </FormField>
+              <FormField label="Contact">
+                <input
+                  type="text"
+                  value={buyerInfo.contactName || ''}
+                  readOnly
+                  className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-lg text-gray-700"
+                />
+              </FormField>
+            </div>
+            <p className="mt-3 text-xs text-gray-500 flex items-center">
+              <Info size={14} className="mr-1" />
+              This information is from your profile. Update it in Settings if needed.
+            </p>
+          </FormSection>
+
+          {/* Line Items Section */}
+          <FormSection title="Items Details" icon={Package}>
+            <div className="mb-4">
+              <div className="grid grid-cols-12 gap-3 text-xs font-medium text-gray-500 uppercase tracking-wider pb-2 border-b border-gray-200">
+                <div className="col-span-4">Description</div>
+                <div className="col-span-2">HSN Code</div>
+                <div className="col-span-2 text-right">Quantity</div>
+                <div className="col-span-2 text-right">Rate (₹)</div>
+                <div className="col-span-1 text-right">Amount</div>
+                <div className="col-span-1"></div>
+              </div>
+            </div>
+
+            {lineItems.map((item, index) => (
+              <LineItemRow
+                key={index}
+                item={item}
+                index={index}
+                onChange={handleUpdateLineItem}
+                onRemove={handleRemoveLineItem}
+                canRemove={lineItems.length > 1}
+              />
+            ))}
+
+            <button
+              type="button"
+              onClick={handleAddLineItem}
+              className="mt-4 flex items-center space-x-2 text-blue-600 hover:text-blue-700 font-medium text-sm"
+            >
+              <Plus size={18} />
+              <span>Add Line Item</span>
+            </button>
+          </FormSection>
+
+          {/* Amount Details Section */}
+          <FormSection title="Amount Details" icon={IndianRupee}>
+            <div className="grid grid-cols-2 gap-6">
+              <div className="space-y-4">
+                <FormField label="Subtotal">
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500">₹</span>
+                    <input
+                      type="text"
+                      value={amounts.subtotal}
+                      readOnly
+                      className="w-full pl-8 pr-4 py-2.5 bg-gray-50 border border-gray-200 rounded-lg text-right font-medium"
+                    />
+                  </div>
+                </FormField>
+                <div className="grid grid-cols-2 gap-4">
+                  <FormField label="CGST">
+                    <div className="relative">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500">₹</span>
+                      <input
+                        type="number"
+                        value={amounts.cgst}
+                        onChange={(e) => setAmounts({ ...amounts, cgst: e.target.value })}
+                        placeholder="0.00"
+                        className="w-full pl-8 pr-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-right"
+                      />
+                    </div>
+                  </FormField>
+                  <FormField label="SGST">
+                    <div className="relative">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500">₹</span>
+                      <input
+                        type="number"
+                        value={amounts.sgst}
+                        onChange={(e) => setAmounts({ ...amounts, sgst: e.target.value })}
+                        placeholder="0.00"
+                        className="w-full pl-8 pr-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-right"
+                      />
+                    </div>
+                  </FormField>
+                </div>
+                <FormField label="IGST (for inter-state)">
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500">₹</span>
+                    <input
+                      type="number"
+                      value={amounts.igst}
+                      onChange={(e) => setAmounts({ ...amounts, igst: e.target.value })}
+                      placeholder="0.00"
+                      className="w-full pl-8 pr-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-right"
+                    />
+                  </div>
+                </FormField>
+              </div>
+
+              <div className="flex items-end">
+                <div className="w-full p-6 bg-blue-50 border border-blue-200 rounded-xl">
+                  <p className="text-sm text-blue-600 mb-1">Total Amount</p>
+                  <p className="text-3xl font-bold text-blue-800">
+                    ₹{parseFloat(amounts.totalAmount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                  </p>
+                  {errors.totalAmount && (
+                    <p className="mt-2 text-xs text-red-600">{errors.totalAmount}</p>
+                  )}
+                </div>
+              </div>
+            </div>
+          </FormSection>
+
+          {/* Attachments Section */}
+          <FormSection title="Attachments" icon={Paperclip}>
+            <div className="border-2 border-dashed border-gray-300 rounded-xl p-6 text-center hover:border-gray-400 transition">
+              <input
+                type="file"
+                id="file-upload"
+                multiple
+                accept=".pdf,.jpg,.jpeg,.png"
+                onChange={handleFileUpload}
+                className="hidden"
+              />
+              <label htmlFor="file-upload" className="cursor-pointer">
+                <Upload size={32} className="text-gray-400 mx-auto mb-3" />
+                <p className="text-gray-600 font-medium">Click to upload or drag and drop</p>
+                <p className="text-sm text-gray-400 mt-1">PDF, JPEG, PNG (Max 10MB each)</p>
+              </label>
+            </div>
+
+            {attachments.length > 0 && (
+              <div className="mt-4 space-y-2">
+                {attachments.map((file, index) => (
+                  <div key={index} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                    <div className="flex items-center space-x-3">
+                      <FileText size={20} className="text-blue-600" />
+                      <div>
+                        <p className="text-sm font-medium text-gray-800">{file.name}</p>
+                        <p className="text-xs text-gray-500">{(file.size / 1024).toFixed(1)} KB</p>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveAttachment(index)}
+                      className="p-1.5 text-red-500 hover:bg-red-50 rounded-lg"
+                    >
+                      <Trash2 size={16} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </FormSection>
+        </div>
       </div>
 
-      {/* Footer Navigation */}
+      {/* Footer */}
       <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 px-6 py-4">
-        <div className="max-w-6xl mx-auto flex items-center justify-between">
+        {submitError && (
+          <div className="max-w-5xl mx-auto mb-3 p-3 bg-red-50 border border-red-200 rounded-lg flex items-center space-x-2">
+            <AlertCircle size={18} className="text-red-600" />
+            <span className="text-sm text-red-700">{submitError}</span>
+          </div>
+        )}
+        <div className="max-w-5xl mx-auto flex items-center justify-between">
           <button
-            onClick={() => {
-              if (currentStep === 0 && entryMode) {
-                setEntryMode(null);
-              } else {
-                setCurrentStep(Math.max(0, currentStep - 1));
-              }
-            }}
-            disabled={currentStep === 0 && !entryMode}
-            className="flex items-center space-x-2 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+            onClick={() => navigate('/invoices')}
+            className="px-6 py-2.5 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 font-medium"
           >
-            <ArrowLeft size={18} />
-            <span>Back</span>
+            Cancel
           </button>
 
           <div className="flex items-center space-x-3">
-            {currentStep < steps.length - 1 && (
-              <button
-                onClick={() => {
-                  // For manual entry, convert data when moving from step 0
-                  if (entryMode === 'manual' && currentStep === 0) {
-                    convertManualToExtracted();
-                  }
-                  setCurrentStep(Math.min(steps.length - 1, currentStep + 1));
-                }}
-                disabled={
-                  // Disable if no entry mode selected
-                  (!entryMode && currentStep === 0) ||
-                  // For AI mode: disable if no file uploaded on step 0
-                  (entryMode === 'ai' && currentStep === 0 && !uploadedFile) ||
-                  // For AI mode: disable if extraction not complete on step 1
-                  (entryMode === 'ai' && currentStep === 1 && !extractionComplete) ||
-                  // For manual mode: disable if required fields missing on step 0
-                  (entryMode === 'manual' && currentStep === 0 && (
-                    !manualData.invoiceNumber ||
-                    !manualData.dueDate ||
-                    !manualData.sellerName ||
-                    !manualData.sellerGstin ||
-                    !manualData.totalAmount
-                  ))
-                }
-                className="flex items-center space-x-2 bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                <span>Continue</span>
-                <ArrowRight size={18} />
-              </button>
-            )}
+            <button
+              onClick={() => handleSubmit(true)}
+              disabled={isSubmitting}
+              className="flex items-center space-x-2 px-6 py-2.5 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 font-medium disabled:opacity-50"
+            >
+              <Save size={18} />
+              <span>Save as Draft</span>
+            </button>
+            <button
+              onClick={() => handleSubmit(false)}
+              disabled={isSubmitting}
+              className="flex items-center space-x-2 bg-blue-600 text-white px-8 py-2.5 rounded-lg hover:bg-blue-700 font-medium disabled:opacity-50"
+            >
+              {isSubmitting ? (
+                <>
+                  <Loader2 size={18} className="animate-spin" />
+                  <span>Submitting...</span>
+                </>
+              ) : (
+                <>
+                  <Send size={18} />
+                  <span>Submit Invoice</span>
+                </>
+              )}
+            </button>
           </div>
         </div>
       </div>
+
+      {/* Seller Referral Modal */}
+      <SellerReferralModal
+        isOpen={showReferralModal}
+        onClose={() => setShowReferralModal(false)}
+        onSubmit={(data) => console.log('Referral sent:', data)}
+      />
     </div>
   );
 }
