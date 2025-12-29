@@ -2,7 +2,7 @@ import React, { useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Upload, FileText, CheckCircle, AlertTriangle, X, ArrowLeft, ArrowRight,
-  Loader2, Sparkles, Edit2, Calendar, Building2,
+  Loader2, Sparkles, Edit2, Calendar, Building2, PenLine,
   Percent, Clock, Send, Save, Info, Check, AlertCircle, RefreshCw,
   ZoomIn, ZoomOut, RotateCw, Download
 } from 'lucide-react';
@@ -135,13 +135,37 @@ export default function CreateInvoice() {
   const [selectedFinanciers, setSelectedFinanciers] = useState([]);
   const [selectedSeller, setSelectedSeller] = useState(null);
   const [isDragging, setIsDragging] = useState(false);
+  const [entryMode, setEntryMode] = useState(null); // 'ai' or 'manual'
+  const [manualData, setManualData] = useState({
+    invoiceNumber: '',
+    invoiceDate: new Date().toISOString().split('T')[0],
+    dueDate: '',
+    sellerName: '',
+    sellerGstin: '',
+    buyerName: '',
+    buyerGstin: '',
+    subtotal: '',
+    taxAmount: '',
+    totalAmount: '',
+  });
 
-  const steps = [
-    { id: 'upload', label: 'Upload Invoice' },
-    { id: 'extract', label: 'AI Extraction' },
-    { id: 'discount', label: 'Set Discount' },
-    { id: 'review', label: 'Review & Submit' },
-  ];
+  const getSteps = () => {
+    if (entryMode === 'manual') {
+      return [
+        { id: 'entry', label: 'Invoice Details' },
+        { id: 'discount', label: 'Set Discount' },
+        { id: 'review', label: 'Review & Submit' },
+      ];
+    }
+    return [
+      { id: 'upload', label: 'Upload Invoice' },
+      { id: 'extract', label: 'AI Extraction' },
+      { id: 'discount', label: 'Set Discount' },
+      { id: 'review', label: 'Review & Submit' },
+    ];
+  };
+
+  const steps = getSteps();
 
   const mappedSellers = [
     { id: 1, name: 'Kumar Textiles Pvt Ltd', gstin: '27AABCU9603R1ZM' },
@@ -305,12 +329,298 @@ export default function CreateInvoice() {
     }
   };
 
+  // Convert manual data to extracted data format
+  const convertManualToExtracted = () => {
+    setExtractedData({
+      invoiceNumber: { value: manualData.invoiceNumber, confidence: 100 },
+      invoiceDate: { value: manualData.invoiceDate, confidence: 100 },
+      dueDate: { value: manualData.dueDate, confidence: 100 },
+      sellerName: { value: manualData.sellerName, confidence: 100 },
+      sellerGstin: { value: manualData.sellerGstin, confidence: 100 },
+      buyerName: { value: manualData.buyerName, confidence: 100 },
+      buyerGstin: { value: manualData.buyerGstin, confidence: 100 },
+      subtotal: { value: manualData.subtotal, confidence: 100 },
+      taxAmount: { value: manualData.taxAmount, confidence: 100 },
+      totalAmount: { value: manualData.totalAmount, confidence: 100 },
+      overallConfidence: 100,
+      validationResults: [
+        { rule: 'Manual Entry', passed: true },
+      ]
+    });
+    setExtractionComplete(true);
+  };
+
+  // Handle manual entry mode selection
+  const handleManualEntry = () => {
+    setEntryMode('manual');
+    setCurrentStep(0);
+  };
+
+  // Handle AI extraction mode selection
+  const handleAIEntry = () => {
+    setEntryMode('ai');
+  };
+
+  // Calculate total from subtotal and tax
+  const updateTotalAmount = (subtotal, tax) => {
+    const total = (parseFloat(subtotal) || 0) + (parseFloat(tax) || 0);
+    setManualData(prev => ({ ...prev, totalAmount: total.toString() }));
+  };
+
   const renderStepContent = () => {
+    // Manual entry form (when entryMode is 'manual')
+    if (entryMode === 'manual' && currentStep === 0) {
+      return (
+        <div className="max-w-3xl mx-auto">
+          <div className="bg-white rounded-xl border border-gray-200 p-6">
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-lg font-semibold text-gray-800">Enter Invoice Details</h3>
+              <button
+                onClick={() => { setEntryMode(null); setCurrentStep(0); }}
+                className="text-sm text-blue-600 hover:text-blue-700"
+              >
+                ← Back to options
+              </button>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Invoice Number *</label>
+                <input
+                  type="text"
+                  value={manualData.invoiceNumber}
+                  onChange={(e) => setManualData({ ...manualData, invoiceNumber: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  placeholder="e.g., INV-2024-001"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Invoice Date *</label>
+                <input
+                  type="date"
+                  value={manualData.invoiceDate}
+                  onChange={(e) => setManualData({ ...manualData, invoiceDate: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+              <div className="col-span-2">
+                <label className="block text-sm font-medium text-gray-700 mb-1">Due Date *</label>
+                <input
+                  type="date"
+                  value={manualData.dueDate}
+                  onChange={(e) => setManualData({ ...manualData, dueDate: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+            </div>
+
+            <hr className="my-6" />
+
+            <h4 className="font-medium text-gray-800 mb-4">Seller Information</h4>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Seller Name *</label>
+                <input
+                  type="text"
+                  value={manualData.sellerName}
+                  onChange={(e) => setManualData({ ...manualData, sellerName: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  placeholder="e.g., Kumar Textiles Pvt Ltd"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Seller GSTIN *</label>
+                <input
+                  type="text"
+                  value={manualData.sellerGstin}
+                  onChange={(e) => setManualData({ ...manualData, sellerGstin: e.target.value.toUpperCase() })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 font-mono"
+                  placeholder="e.g., 27AABCU9603R1ZM"
+                  maxLength={15}
+                />
+              </div>
+            </div>
+
+            <hr className="my-6" />
+
+            <h4 className="font-medium text-gray-800 mb-4">Buyer Information (Your Company)</h4>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Buyer Name</label>
+                <input
+                  type="text"
+                  value={manualData.buyerName}
+                  onChange={(e) => setManualData({ ...manualData, buyerName: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  placeholder="Your company name"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Buyer GSTIN</label>
+                <input
+                  type="text"
+                  value={manualData.buyerGstin}
+                  onChange={(e) => setManualData({ ...manualData, buyerGstin: e.target.value.toUpperCase() })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 font-mono"
+                  placeholder="Your GSTIN"
+                  maxLength={15}
+                />
+              </div>
+            </div>
+
+            <hr className="my-6" />
+
+            <h4 className="font-medium text-gray-800 mb-4">Amount Details</h4>
+            <div className="grid grid-cols-3 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Subtotal (₹) *</label>
+                <input
+                  type="number"
+                  value={manualData.subtotal}
+                  onChange={(e) => {
+                    setManualData({ ...manualData, subtotal: e.target.value });
+                    updateTotalAmount(e.target.value, manualData.taxAmount);
+                  }}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  placeholder="0.00"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Tax Amount (₹)</label>
+                <input
+                  type="number"
+                  value={manualData.taxAmount}
+                  onChange={(e) => {
+                    setManualData({ ...manualData, taxAmount: e.target.value });
+                    updateTotalAmount(manualData.subtotal, e.target.value);
+                  }}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  placeholder="0.00"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Total Amount (₹) *</label>
+                <input
+                  type="number"
+                  value={manualData.totalAmount}
+                  onChange={(e) => setManualData({ ...manualData, totalAmount: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 font-semibold"
+                  placeholder="0.00"
+                />
+              </div>
+            </div>
+
+            <div className="mt-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+              <div className="flex items-start space-x-2">
+                <Info size={18} className="text-blue-600 mt-0.5" />
+                <div className="text-sm text-blue-700">
+                  <p className="font-medium">Required fields are marked with *</p>
+                  <p>Make sure all details match your invoice document for accurate processing.</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
     switch (currentStep) {
       case 0:
+        // Entry mode selection (initial state)
+        if (!entryMode) {
+          return (
+            <div className="max-w-3xl mx-auto">
+              <div className="text-center mb-8">
+                <h2 className="text-2xl font-bold text-gray-800 mb-2">How would you like to create the invoice?</h2>
+                <p className="text-gray-500">Choose between AI-powered extraction or manual entry</p>
+              </div>
+
+              <div className="grid grid-cols-2 gap-6">
+                {/* AI Extraction Option */}
+                <div
+                  onClick={handleAIEntry}
+                  className="bg-white border-2 border-gray-200 rounded-xl p-8 cursor-pointer hover:border-blue-500 hover:shadow-lg transition-all group"
+                >
+                  <div className="w-16 h-16 bg-blue-100 rounded-xl flex items-center justify-center mx-auto mb-4 group-hover:bg-blue-200 transition">
+                    <Sparkles size={32} className="text-blue-600" />
+                  </div>
+                  <h3 className="text-lg font-semibold text-gray-800 text-center mb-2">AI Extraction</h3>
+                  <p className="text-sm text-gray-500 text-center mb-4">
+                    Upload your invoice and let AI extract all the details automatically
+                  </p>
+                  <ul className="text-sm text-gray-600 space-y-2">
+                    <li className="flex items-center space-x-2">
+                      <Check size={16} className="text-green-500" />
+                      <span>Automatic data extraction</span>
+                    </li>
+                    <li className="flex items-center space-x-2">
+                      <Check size={16} className="text-green-500" />
+                      <span>Confidence scores</span>
+                    </li>
+                    <li className="flex items-center space-x-2">
+                      <Check size={16} className="text-green-500" />
+                      <span>GSTIN validation</span>
+                    </li>
+                  </ul>
+                  <div className="mt-4 p-2 bg-yellow-50 border border-yellow-200 rounded-lg">
+                    <p className="text-xs text-yellow-700 text-center">
+                      <AlertCircle size={12} className="inline mr-1" />
+                      AI feature coming soon - uses demo data for now
+                    </p>
+                  </div>
+                </div>
+
+                {/* Manual Entry Option */}
+                <div
+                  onClick={handleManualEntry}
+                  className="bg-white border-2 border-gray-200 rounded-xl p-8 cursor-pointer hover:border-green-500 hover:shadow-lg transition-all group"
+                >
+                  <div className="w-16 h-16 bg-green-100 rounded-xl flex items-center justify-center mx-auto mb-4 group-hover:bg-green-200 transition">
+                    <PenLine size={32} className="text-green-600" />
+                  </div>
+                  <h3 className="text-lg font-semibold text-gray-800 text-center mb-2">Manual Entry</h3>
+                  <p className="text-sm text-gray-500 text-center mb-4">
+                    Enter invoice details manually using a simple form
+                  </p>
+                  <ul className="text-sm text-gray-600 space-y-2">
+                    <li className="flex items-center space-x-2">
+                      <Check size={16} className="text-green-500" />
+                      <span>Full control over data</span>
+                    </li>
+                    <li className="flex items-center space-x-2">
+                      <Check size={16} className="text-green-500" />
+                      <span>No file upload needed</span>
+                    </li>
+                    <li className="flex items-center space-x-2">
+                      <Check size={16} className="text-green-500" />
+                      <span>Quick and simple</span>
+                    </li>
+                  </ul>
+                  <div className="mt-4 p-2 bg-green-50 border border-green-200 rounded-lg">
+                    <p className="text-xs text-green-700 text-center">
+                      <Check size={12} className="inline mr-1" />
+                      Recommended for quick invoice creation
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          );
+        }
+
+        // AI mode - file upload
         return (
           <div className="max-w-2xl mx-auto">
-            <div 
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-gray-800">Upload Invoice for AI Extraction</h3>
+              <button
+                onClick={() => { setEntryMode(null); setUploadedFile(null); }}
+                className="text-sm text-blue-600 hover:text-blue-700"
+              >
+                ← Back to options
+              </button>
+            </div>
+            <div
               className={`border-2 border-dashed rounded-xl p-12 text-center transition-all
                 ${isDragging ? 'border-blue-500 bg-blue-50' : 'border-gray-300 hover:border-gray-400'}
                 ${uploadedFile ? 'border-green-500 bg-green-50' : ''}`}
@@ -704,8 +1014,14 @@ export default function CreateInvoice() {
       <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 px-6 py-4">
         <div className="max-w-6xl mx-auto flex items-center justify-between">
           <button
-            onClick={() => setCurrentStep(Math.max(0, currentStep - 1))}
-            disabled={currentStep === 0}
+            onClick={() => {
+              if (currentStep === 0 && entryMode) {
+                setEntryMode(null);
+              } else {
+                setCurrentStep(Math.max(0, currentStep - 1));
+              }
+            }}
+            disabled={currentStep === 0 && !entryMode}
             className="flex items-center space-x-2 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <ArrowLeft size={18} />
@@ -713,10 +1029,31 @@ export default function CreateInvoice() {
           </button>
 
           <div className="flex items-center space-x-3">
-            {currentStep < 3 && (
+            {currentStep < steps.length - 1 && (
               <button
-                onClick={() => setCurrentStep(Math.min(3, currentStep + 1))}
-                disabled={(currentStep === 0 && !uploadedFile) || (currentStep === 1 && !extractionComplete)}
+                onClick={() => {
+                  // For manual entry, convert data when moving from step 0
+                  if (entryMode === 'manual' && currentStep === 0) {
+                    convertManualToExtracted();
+                  }
+                  setCurrentStep(Math.min(steps.length - 1, currentStep + 1));
+                }}
+                disabled={
+                  // Disable if no entry mode selected
+                  (!entryMode && currentStep === 0) ||
+                  // For AI mode: disable if no file uploaded on step 0
+                  (entryMode === 'ai' && currentStep === 0 && !uploadedFile) ||
+                  // For AI mode: disable if extraction not complete on step 1
+                  (entryMode === 'ai' && currentStep === 1 && !extractionComplete) ||
+                  // For manual mode: disable if required fields missing on step 0
+                  (entryMode === 'manual' && currentStep === 0 && (
+                    !manualData.invoiceNumber ||
+                    !manualData.dueDate ||
+                    !manualData.sellerName ||
+                    !manualData.sellerGstin ||
+                    !manualData.totalAmount
+                  ))
+                }
                 className="flex items-center space-x-2 bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <span>Continue</span>
