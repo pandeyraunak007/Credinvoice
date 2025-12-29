@@ -329,30 +329,60 @@ export const disbursementService = {
 
 // Admin Service
 export const adminService = {
-  getKYCQueue: (params = {}) => {
+  // KYC Applications
+  getKycApplications: (params = {}) => {
     const query = new URLSearchParams(params).toString();
-    return apiRequest(`/admin/kyc${query ? `?${query}` : ''}`);
+    return apiRequest(`/admin/kyc-applications${query ? `?${query}` : ''}`);
   },
 
-  getKYCApplication: (id) => apiRequest(`/admin/kyc/${id}`),
+  getKycApplicationDetails: (userId) => apiRequest(`/admin/kyc-applications/${userId}`),
 
-  approveKYC: (id, data) =>
-    apiRequest(`/admin/kyc/${id}/approve`, {
+  approveKyc: (userId, data = {}) =>
+    apiRequest(`/admin/kyc-applications/${userId}/approve`, {
       method: 'POST',
       body: JSON.stringify(data),
     }),
 
-  rejectKYC: (id, data) =>
-    apiRequest(`/admin/kyc/${id}/reject`, {
+  rejectKyc: (userId, data) =>
+    apiRequest(`/admin/kyc-applications/${userId}/reject`, {
       method: 'POST',
       body: JSON.stringify(data),
     }),
 
-  requestResubmission: (id, data) =>
-    apiRequest(`/admin/kyc/${id}/resubmit`, {
-      method: 'POST',
+  // Dashboard
+  getDashboard: () => apiRequest('/admin/dashboard'),
+
+  // Users
+  getUsers: (params = {}) => {
+    const query = new URLSearchParams(params).toString();
+    return apiRequest(`/admin/users${query ? `?${query}` : ''}`);
+  },
+
+  getUserDetails: (userId) => apiRequest(`/admin/users/${userId}`),
+
+  updateUserStatus: (userId, data) =>
+    apiRequest(`/admin/users/${userId}/status`, {
+      method: 'PATCH',
       body: JSON.stringify(data),
     }),
+
+  // Invoices
+  getInvoices: (params = {}) => {
+    const query = new URLSearchParams(params).toString();
+    return apiRequest(`/admin/invoices${query ? `?${query}` : ''}`);
+  },
+
+  // Transactions
+  getTransactions: (params = {}) => {
+    const query = new URLSearchParams(params).toString();
+    return apiRequest(`/admin/transactions${query ? `?${query}` : ''}`);
+  },
+
+  // Audit Logs
+  getAuditLogs: (params = {}) => {
+    const query = new URLSearchParams(params).toString();
+    return apiRequest(`/admin/audit-logs${query ? `?${query}` : ''}`);
+  },
 };
 
 export default {

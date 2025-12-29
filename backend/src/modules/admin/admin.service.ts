@@ -1,4 +1,4 @@
-import { UserStatus, UserType, InvoiceStatus, ProductType } from '@prisma/client';
+import { UserStatus, UserType, InvoiceStatus, ProductType, KycStatus } from '@prisma/client';
 import { prisma } from '../../config/database';
 import { AppError } from '../../middleware/errorHandler';
 import {
@@ -6,6 +6,8 @@ import {
   ListInvoicesQuery,
   ListAuditLogsQuery,
   UpdateUserStatusInput,
+  ReviewKycInput,
+  ListKycApplicationsQuery,
 } from './admin.validation';
 
 export class AdminService {
@@ -311,6 +313,300 @@ export class AdminService {
         userAgent,
       },
     });
+  }
+
+  // List KYC applications (users with KYC data)
+  async listKycApplications(query: ListKycApplicationsQuery) {
+    const { status, userType, page, limit } = query;
+    const skip = (page - 1) * limit;
+
+    // Build where clause for each entity type
+    const results: any[] = [];
+
+    // Get buyers
+    if (!userType || userType === 'BUYER') {
+      const buyerWhere: any = {};
+      if (status) buyerWhere.kycStatus = status;
+
+      const buyers = await prisma.buyer.findMany({
+        where: buyerWhere,
+        include: {
+          user: { select: { id: true, email: true, createdAt: true, status: true } },
+          kycDocuments: { select: { id: true, documentType: true, status: true } },
+          bankAccounts: { select: { id: true, bankName: true, isPrimary: true } },
+        },
+        orderBy: { createdAt: 'desc' },
+      });
+
+      buyers.forEach((b) => {
+        results.push({
+          id: b.userId,
+          entityType: 'BUYER',
+          companyName: b.companyName,
+          gstin: b.gstin,
+          pan: b.pan,
+          kycStatus: b.kycStatus,
+          email: b.user.email,
+          userStatus: b.user.status,
+          documentsCount: b.kycDocuments.length,
+          verifiedDocs: b.kycDocuments.filter((d) => d.status === 'APPROVED').length,
+          pendingDocs: b.kycDocuments.filter((d) => d.status === 'PENDING').length,
+          hasBankAccount: b.bankAccounts.length > 0,
+          createdAt: b.createdAt,
+          industry: b.industry,
+          city: b.city,
+          state: b.state,
+        });
+      });
+    }
+
+    // Get sellers
+    if (!userType || userType === 'SELLER') {
+      const sellerWhere: any = {};
+      if (status) sellerWhere.kycStatus = status;
+
+      const sellers = await prisma.seller.findMany({
+        where: sellerWhere,
+        include: {
+          user: { select: { id: true, email: true, createdAt: true, status: true } },
+          kycDocuments: { select: { id: true, documentType: true, status: true } },
+          bankAccounts: { select: { id: true, bankName: true, isPrimary: true } },
+        },
+        orderBy: { createdAt: 'desc' },
+      });
+
+      sellers.forEach((s) => {
+        results.push({
+          id: s.userId,
+          entityType: 'SELLER',
+          companyName: s.companyName,
+          gstin: s.gstin,
+          pan: s.pan,
+          kycStatus: s.kycStatus,
+          email: s.user.email,
+          userStatus: s.user.status,
+          documentsCount: s.kycDocuments.length,
+          verifiedDocs: s.kycDocuments.filter((d) => d.status === 'APPROVED').length,
+          pendingDocs: s.kycDocuments.filter((d) => d.status === 'PENDING').length,
+          hasBankAccount: s.bankAccounts.length > 0,
+          createdAt: s.createdAt,
+          businessType: s.businessType,
+          city: s.city,
+          state: s.state,
+        });
+      });
+    }
+
+    // Get financiers
+    if (!userType || userType === 'FINANCIER') {
+      const financierWhere: any = {};
+      if (status) financierWhere.kycStatus = status;
+
+      const financiers = await prisma.financier.findMany({
+        where: financierWhere,
+        include: {
+          user: { select: { id: true, email: true, createdAt: true, status: true } },
+          kycDocuments: { select: { id: true, documentType: true, status: true } },
+          bankAccounts: { select: { id: true, bankName: true, isPrimary: true } },
+        },
+        orderBy: { createdAt: 'desc' },
+      });
+
+      financiers.forEach((f) => {
+        results.push({
+          id: f.userId,
+          entityType: 'FINANCIER',
+          companyName: f.companyName,
+          rbiLicense: f.rbiLicense,
+          kycStatus: f.kycStatus,
+          email: f.user.email,
+          userStatus: f.user.status,
+          documentsCount: f.kycDocuments.length,
+          verifiedDocs: f.kycDocuments.filter((d) => d.status === 'APPROVED').length,
+          pendingDocs: f.kycDocuments.filter((d) => d.status === 'PENDING').length,
+          hasBankAccount: f.bankAccounts.length > 0,
+          createdAt: f.createdAt,
+          entityType2: f.entityType,
+          city: f.city,
+          state: f.state,
+        });
+      });
+    }
+
+    // Sort by createdAt desc
+    results.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
+    // Apply pagination
+    const total = results.length;
+    const paginated = results.slice(skip, skip + limit);
+
+    return {
+      applications: paginated,
+      pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
+    };
+  }
+
+  // Get KYC application details for a user
+  async getKycApplicationDetails(userId: string) {
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      include: {
+        buyer: {
+          include: {
+            bankAccounts: true,
+            kycDocuments: true,
+          },
+        },
+        seller: {
+          include: {
+            bankAccounts: true,
+            kycDocuments: true,
+          },
+        },
+        financier: {
+          include: {
+            bankAccounts: true,
+            kycDocuments: true,
+          },
+        },
+      },
+    });
+
+    if (!user) {
+      throw new AppError('User not found', 404);
+    }
+
+    const entity = user.buyer || user.seller || user.financier;
+    if (!entity) {
+      throw new AppError('User profile not found', 404);
+    }
+
+    return {
+      user: {
+        id: user.id,
+        email: user.email,
+        userType: user.userType,
+        status: user.status,
+        createdAt: user.createdAt,
+      },
+      entity,
+      entityType: user.userType,
+    };
+  }
+
+  // Approve KYC for a user
+  async approveKyc(userId: string, adminUserId: string, notes?: string) {
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      include: { buyer: true, seller: true, financier: true },
+    });
+
+    if (!user) {
+      throw new AppError('User not found', 404);
+    }
+
+    let entity: any;
+    let entityType: string;
+    let oldStatus: string;
+
+    if (user.buyer) {
+      oldStatus = user.buyer.kycStatus;
+      entity = await prisma.buyer.update({
+        where: { userId },
+        data: { kycStatus: 'APPROVED' },
+      });
+      entityType = 'BUYER';
+    } else if (user.seller) {
+      oldStatus = user.seller.kycStatus;
+      entity = await prisma.seller.update({
+        where: { userId },
+        data: { kycStatus: 'APPROVED' },
+      });
+      entityType = 'SELLER';
+    } else if (user.financier) {
+      oldStatus = user.financier.kycStatus;
+      entity = await prisma.financier.update({
+        where: { userId },
+        data: { kycStatus: 'APPROVED' },
+      });
+      entityType = 'FINANCIER';
+    } else {
+      throw new AppError('User profile not found', 404);
+    }
+
+    // Also approve all pending documents
+    await prisma.kycDocument.updateMany({
+      where: {
+        [`${entityType.toLowerCase()}Id`]: entity.id,
+        status: 'PENDING',
+      },
+      data: { status: 'APPROVED' },
+    });
+
+    // Create audit log
+    await this.createAuditLog(
+      adminUserId,
+      'APPROVE_KYC',
+      entityType,
+      entity.id,
+      { kycStatus: oldStatus },
+      { kycStatus: 'APPROVED', notes }
+    );
+
+    return entity;
+  }
+
+  // Reject KYC for a user
+  async rejectKyc(userId: string, adminUserId: string, data: ReviewKycInput) {
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      include: { buyer: true, seller: true, financier: true },
+    });
+
+    if (!user) {
+      throw new AppError('User not found', 404);
+    }
+
+    let entity: any;
+    let entityType: string;
+    let oldStatus: string;
+
+    if (user.buyer) {
+      oldStatus = user.buyer.kycStatus;
+      entity = await prisma.buyer.update({
+        where: { userId },
+        data: { kycStatus: 'REJECTED' },
+      });
+      entityType = 'BUYER';
+    } else if (user.seller) {
+      oldStatus = user.seller.kycStatus;
+      entity = await prisma.seller.update({
+        where: { userId },
+        data: { kycStatus: 'REJECTED' },
+      });
+      entityType = 'SELLER';
+    } else if (user.financier) {
+      oldStatus = user.financier.kycStatus;
+      entity = await prisma.financier.update({
+        where: { userId },
+        data: { kycStatus: 'REJECTED' },
+      });
+      entityType = 'FINANCIER';
+    } else {
+      throw new AppError('User profile not found', 404);
+    }
+
+    // Create audit log
+    await this.createAuditLog(
+      adminUserId,
+      'REJECT_KYC',
+      entityType,
+      entity.id,
+      { kycStatus: oldStatus },
+      { kycStatus: 'REJECTED', reason: data.reason, notes: data.notes }
+    );
+
+    return entity;
   }
 }
 

@@ -80,3 +80,46 @@ export const listAuditLogs = asyncHandler(async (req: Request, res: Response) =>
   const result = await adminService.listAuditLogs(query);
   return sendPaginated(res, result.logs, result.pagination);
 });
+
+// List KYC applications
+export const listKycApplications = asyncHandler(async (req: Request, res: Response) => {
+  const query = {
+    status: req.query.status as any,
+    userType: req.query.userType as any,
+    page: parseInt(req.query.page as string) || 1,
+    limit: parseInt(req.query.limit as string) || 20,
+  };
+
+  const result = await adminService.listKycApplications(query);
+  return sendPaginated(res, result.applications, result.pagination);
+});
+
+// Get KYC application details
+export const getKycApplicationDetails = asyncHandler(async (req: Request, res: Response) => {
+  const { userId } = req.params;
+  const details = await adminService.getKycApplicationDetails(userId);
+  return sendSuccess(res, details);
+});
+
+// Approve KYC
+export const approveKyc = asyncHandler(async (req: Request, res: Response) => {
+  if (!req.user) {
+    return sendError(res, 'Not authenticated', 401);
+  }
+
+  const { userId } = req.params;
+  const { notes } = req.body || {};
+  const result = await adminService.approveKyc(userId, req.user.userId, notes);
+  return sendSuccess(res, result, 'KYC approved successfully');
+});
+
+// Reject KYC
+export const rejectKyc = asyncHandler(async (req: Request, res: Response) => {
+  if (!req.user) {
+    return sendError(res, 'Not authenticated', 401);
+  }
+
+  const { userId } = req.params;
+  const result = await adminService.rejectKyc(userId, req.user.userId, req.body);
+  return sendSuccess(res, result, 'KYC rejected');
+});

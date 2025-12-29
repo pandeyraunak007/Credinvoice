@@ -45,7 +45,23 @@ export const updateUserStatusSchema = z.object({
   reason: z.string().optional(),
 });
 
+// KYC review schema
+export const reviewKycSchema = z.object({
+  reason: z.string().min(1, 'Rejection reason is required'),
+  notes: z.string().optional(),
+});
+
+// List KYC applications query
+export const listKycApplicationsQuerySchema = z.object({
+  status: z.enum(['PENDING', 'SUBMITTED', 'UNDER_REVIEW', 'APPROVED', 'REJECTED']).optional(),
+  userType: z.enum(['BUYER', 'SELLER', 'FINANCIER']).optional(),
+  page: z.string().transform(Number).default('1'),
+  limit: z.string().transform(Number).default('20'),
+});
+
 export type ListUsersQuery = z.infer<typeof listUsersQuerySchema>;
 export type ListInvoicesQuery = z.infer<typeof listInvoicesQuerySchema>;
 export type ListAuditLogsQuery = z.infer<typeof listAuditLogsQuerySchema>;
 export type UpdateUserStatusInput = z.infer<typeof updateUserStatusSchema>;
+export type ReviewKycInput = z.infer<typeof reviewKycSchema>;
+export type ListKycApplicationsQuery = z.infer<typeof listKycApplicationsQuerySchema>;
