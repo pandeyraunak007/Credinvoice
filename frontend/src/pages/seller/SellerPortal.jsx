@@ -690,9 +690,13 @@ export function OfferDetailPage() {
   };
 
   const handleReject = async () => {
+    if (!rejectReason || rejectReason.trim().length < 10) {
+      alert('Please provide a rejection reason (at least 10 characters)');
+      return;
+    }
     setProcessing(true);
     try {
-      await discountService.reject(id);
+      await discountService.reject(id, rejectReason.trim());
       setShowRejectModal(false);
       navigate('/seller');
     } catch (error) {
@@ -914,12 +918,13 @@ export function OfferDetailPage() {
               <h3 className="text-xl font-semibold text-gray-800 text-center mb-2">Reject This Offer?</h3>
               <p className="text-gray-500 text-center mb-6">You'll wait until {offer.invoice.dueDate} for full payment</p>
               <div className="mb-6">
-                <label className="block text-sm font-medium text-gray-700 mb-2">Reason (optional)</label>
-                <textarea value={rejectReason} onChange={(e) => setRejectReason(e.target.value)} placeholder="e.g., Discount too high..." className="w-full px-3 py-2 border border-gray-300 rounded-lg" rows={3} />
+                <label className="block text-sm font-medium text-gray-700 mb-2">Reason for rejection <span className="text-red-500">*</span></label>
+                <textarea value={rejectReason} onChange={(e) => setRejectReason(e.target.value)} placeholder="e.g., Discount percentage is too high, I need at least 95% of invoice value..." className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500" rows={3} />
+                <p className="text-xs text-gray-500 mt-1">Minimum 10 characters. This will be shared with the buyer.</p>
               </div>
               <div className="flex items-center space-x-3">
                 <button onClick={() => setShowRejectModal(false)} disabled={processing} className="flex-1 px-4 py-3 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 font-medium disabled:opacity-50">Cancel</button>
-                <button onClick={handleReject} disabled={processing} className="flex-1 px-4 py-3 bg-red-600 text-white rounded-lg hover:bg-red-700 font-medium disabled:opacity-50 flex items-center justify-center">
+                <button onClick={handleReject} disabled={processing || rejectReason.trim().length < 10} className="flex-1 px-4 py-3 bg-red-600 text-white rounded-lg hover:bg-red-700 font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center">
                   {processing ? <><Loader2 size={18} className="animate-spin mr-2" />Processing...</> : 'Reject'}
                 </button>
               </div>
