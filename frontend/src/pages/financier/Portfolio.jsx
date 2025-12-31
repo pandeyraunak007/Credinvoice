@@ -110,7 +110,14 @@ const ProcessDisbursementModal = ({ isOpen, onClose, investment, onProcess, isLo
                   <div className="text-center py-6 bg-gray-50 rounded-lg">
                     <Wallet size={32} className="mx-auto text-gray-300 mb-2" />
                     <p className="text-gray-600 font-medium">No bank accounts found</p>
-                    <p className="text-sm text-gray-500">Add a bank account to process disbursements</p>
+                    <p className="text-sm text-gray-500 mb-3">Add a bank account to process disbursements</p>
+                    <a
+                      href="/account"
+                      className="inline-flex items-center space-x-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 text-sm font-medium"
+                    >
+                      <BanknoteIcon size={16} />
+                      <span>Add Bank Account</span>
+                    </a>
                   </div>
                 ) : (
                   <div className="space-y-2">

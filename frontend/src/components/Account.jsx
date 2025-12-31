@@ -20,6 +20,15 @@ export default function Account() {
   const [formData, setFormData] = useState({});
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(null);
+  const [showAddBankModal, setShowAddBankModal] = useState(false);
+  const [bankFormData, setBankFormData] = useState({
+    bankName: '',
+    accountNo: '',
+    ifscCode: '',
+    accountHolderName: '',
+    isPrimary: false
+  });
+  const [addingBank, setAddingBank] = useState(false);
 
   const userType = user?.userType;
   const entityProfile = userType === 'BUYER' ? profile?.buyer :
@@ -84,6 +93,36 @@ export default function Account() {
     authService.logout();
     logout();
     navigate('/login');
+  };
+
+  const handleAddBankAccount = async () => {
+    if (!bankFormData.bankName || !bankFormData.accountNo || !bankFormData.ifscCode || !bankFormData.accountHolderName) {
+      setError('Please fill in all required fields');
+      return;
+    }
+
+    try {
+      setAddingBank(true);
+      setError(null);
+      await profileService.addBankAccount(bankFormData);
+      setSuccess('Bank account added successfully');
+      setShowAddBankModal(false);
+      setBankFormData({
+        bankName: '',
+        accountNo: '',
+        ifscCode: '',
+        accountHolderName: '',
+        isPrimary: false
+      });
+      // Refresh bank accounts
+      const bankRes = await profileService.getBankAccounts();
+      setBankAccounts(bankRes.data || []);
+      setTimeout(() => setSuccess(null), 3000);
+    } catch (err) {
+      setError(err.message || 'Failed to add bank account');
+    } finally {
+      setAddingBank(false);
+    }
   };
 
   const getBackLink = () => {
@@ -393,9 +432,12 @@ export default function Account() {
             <div className="flex items-center justify-between p-6 border-b border-gray-100">
               <div>
                 <h2 className="text-lg font-semibold text-gray-800">Bank Accounts</h2>
-                <p className="text-sm text-gray-500">Manage your linked bank accounts</p>
+                <p className="text-sm text-gray-500">Manage your linked bank accounts for payments and disbursements</p>
               </div>
-              <button className={`flex items-center space-x-2 px-4 py-2 bg-${color}-600 text-white rounded-lg hover:bg-${color}-700`}>
+              <button
+                onClick={() => setShowAddBankModal(true)}
+                className={`flex items-center space-x-2 px-4 py-2 bg-${color}-600 text-white rounded-lg hover:bg-${color}-700`}
+              >
                 <CreditCard size={18} />
                 <span>Add Account</span>
               </button>
@@ -406,7 +448,13 @@ export default function Account() {
                 <div className="text-center py-12">
                   <CreditCard size={48} className="mx-auto text-gray-300 mb-4" />
                   <h3 className="text-lg font-semibold text-gray-800 mb-2">No bank accounts linked</h3>
-                  <p className="text-gray-500">Add a bank account to receive payments</p>
+                  <p className="text-gray-500 mb-4">Add a bank account to process disbursements and receive payments</p>
+                  <button
+                    onClick={() => setShowAddBankModal(true)}
+                    className={`px-4 py-2 bg-${color}-600 text-white rounded-lg hover:bg-${color}-700`}
+                  >
+                    Add Bank Account
+                  </button>
                 </div>
               ) : (
                 <div className="space-y-4">
@@ -422,6 +470,9 @@ export default function Account() {
                             A/C: ****{account.accountNo?.slice(-4) || '****'}
                           </p>
                           <p className="text-xs text-gray-400">IFSC: {account.ifscCode}</p>
+                          {account.accountHolderName && (
+                            <p className="text-xs text-gray-400">Holder: {account.accountHolderName}</p>
+                          )}
                         </div>
                       </div>
                       {account.isPrimary && (
@@ -433,6 +484,108 @@ export default function Account() {
                   ))}
                 </div>
               )}
+            </div>
+          </div>
+        )}
+
+        {/* Add Bank Account Modal */}
+        {showAddBankModal && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+            <div className="bg-white rounded-2xl w-full max-w-md mx-4 overflow-hidden">
+              <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+                <h3 className="text-lg font-semibold text-gray-800">Add Bank Account</h3>
+                <button
+                  onClick={() => setShowAddBankModal(false)}
+                  className="p-2 hover:bg-gray-100 rounded-lg"
+                >
+                  <X size={20} className="text-gray-500" />
+                </button>
+              </div>
+
+              <div className="p-6 space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Bank Name *</label>
+                  <input
+                    type="text"
+                    value={bankFormData.bankName}
+                    onChange={(e) => setBankFormData({ ...bankFormData, bankName: e.target.value })}
+                    placeholder="e.g., HDFC Bank, ICICI Bank"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Account Number *</label>
+                  <input
+                    type="text"
+                    value={bankFormData.accountNo}
+                    onChange={(e) => setBankFormData({ ...bankFormData, accountNo: e.target.value })}
+                    placeholder="Enter account number"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">IFSC Code *</label>
+                  <input
+                    type="text"
+                    value={bankFormData.ifscCode}
+                    onChange={(e) => setBankFormData({ ...bankFormData, ifscCode: e.target.value.toUpperCase() })}
+                    placeholder="e.g., HDFC0001234"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 uppercase"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Account Holder Name *</label>
+                  <input
+                    type="text"
+                    value={bankFormData.accountHolderName}
+                    onChange={(e) => setBankFormData({ ...bankFormData, accountHolderName: e.target.value })}
+                    placeholder="Name as per bank records"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  />
+                </div>
+
+                <div className="flex items-center space-x-2">
+                  <input
+                    type="checkbox"
+                    id="isPrimary"
+                    checked={bankFormData.isPrimary}
+                    onChange={(e) => setBankFormData({ ...bankFormData, isPrimary: e.target.checked })}
+                    className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                  />
+                  <label htmlFor="isPrimary" className="text-sm text-gray-700">
+                    Set as primary account
+                  </label>
+                </div>
+
+                <div className="flex items-center space-x-3 pt-4">
+                  <button
+                    onClick={() => setShowAddBankModal(false)}
+                    className="flex-1 px-4 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 font-medium"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleAddBankAccount}
+                    disabled={addingBank}
+                    className={`flex-1 px-4 py-3 bg-${color}-600 text-white rounded-lg hover:bg-${color}-700 font-medium flex items-center justify-center space-x-2 disabled:opacity-50`}
+                  >
+                    {addingBank ? (
+                      <>
+                        <Loader2 size={18} className="animate-spin" />
+                        <span>Adding...</span>
+                      </>
+                    ) : (
+                      <>
+                        <CreditCard size={18} />
+                        <span>Add Account</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
         )}
