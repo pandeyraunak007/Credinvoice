@@ -7,6 +7,7 @@ import {
   ArrowUpDown, RefreshCw, ArrowLeft, Loader2, Wallet, Users, X
 } from 'lucide-react';
 import { invoiceService, discountService } from '../../services/api';
+import { useAuth } from '../../context/AuthContext';
 
 const statusConfig = {
   DRAFT: { label: 'Draft', color: 'bg-gray-100 text-gray-700', icon: FileText },
@@ -281,12 +282,16 @@ const BulkDiscountModal = ({ isOpen, onClose, selectedInvoices, onSubmit, isLoad
 
 export default function InvoicesPage() {
   const navigate = useNavigate();
+  const { user } = useAuth();
+  const isSeller = user?.userType === 'SELLER';
+  const isBuyer = user?.userType === 'BUYER';
+
   const [invoices, setInvoices] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
-  const [sellerFilter, setSellerFilter] = useState('all');
+  const [counterpartyFilter, setCounterpartyFilter] = useState('all');
   const [showFilters, setShowFilters] = useState(false);
   const [selectedInvoices, setSelectedInvoices] = useState([]);
 
@@ -316,16 +321,20 @@ export default function InvoicesPage() {
     fetchInvoices();
   }, []);
 
-  const uniqueSellers = [...new Set(invoices.map(inv => inv.sellerName).filter(Boolean))];
+  // For sellers, show buyers; for buyers, show sellers
+  const uniqueCounterparties = [...new Set(invoices.map(inv =>
+    isSeller ? inv.buyerName : inv.sellerName
+  ).filter(Boolean))];
 
   const filteredInvoices = invoices
     .filter(inv => {
       if (statusFilter !== 'all' && inv.status !== statusFilter) return false;
-      if (sellerFilter !== 'all' && inv.sellerName !== sellerFilter) return false;
+      const counterpartyName = isSeller ? inv.buyerName : inv.sellerName;
+      if (counterpartyFilter !== 'all' && counterpartyName !== counterpartyFilter) return false;
       const searchLower = searchTerm.toLowerCase();
       if (searchTerm &&
           !inv.invoiceNumber?.toLowerCase().includes(searchLower) &&
-          !inv.sellerName?.toLowerCase().includes(searchLower)) return false;
+          !counterpartyName?.toLowerCase().includes(searchLower)) return false;
       return true;
     });
 
@@ -478,6 +487,33 @@ export default function InvoicesPage() {
   };
 
   const getActionButtons = (invoice) => {
+    // Seller-specific actions
+    if (isSeller) {
+      // Sellers can only view invoices - no funding options
+      const hasOffer = invoice.discountOffer;
+      if (hasOffer && invoice.discountOffer.status === 'PENDING') {
+        return (
+          <button
+            onClick={(e) => { e.stopPropagation(); navigate(`/seller/offers/${invoice.discountOffer.id}`); }}
+            className="bg-green-600 text-white px-3 py-1 rounded-lg text-sm hover:bg-green-700 flex items-center space-x-1"
+          >
+            <Eye size={14} />
+            <span>Review Offer</span>
+          </button>
+        );
+      }
+      return (
+        <button
+          onClick={(e) => { e.stopPropagation(); navigate(`/invoices/${invoice.id}`); }}
+          className="text-blue-600 hover:text-blue-700 text-sm font-medium flex items-center space-x-1"
+        >
+          <Eye size={14} />
+          <span>View</span>
+        </button>
+      );
+    }
+
+    // Buyer-specific actions
     switch (invoice.status) {
       case 'DRAFT':
         return (
@@ -615,21 +651,27 @@ export default function InvoicesPage() {
       <div className="bg-white border-b border-gray-200 px-6 py-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-4">
-            <button onClick={() => navigate('/')} className="p-2 hover:bg-gray-100 rounded-lg">
+            <button onClick={() => navigate(isSeller ? '/seller' : '/')} className="p-2 hover:bg-gray-100 rounded-lg">
               <ArrowLeft size={20} className="text-gray-600" />
             </button>
             <div>
-              <h1 className="text-2xl font-bold text-gray-800">Invoices</h1>
-              <p className="text-gray-500 text-sm">Manage your invoices and discount offers</p>
+              <h1 className="text-2xl font-bold text-gray-800">
+                {isSeller ? 'My Invoices' : 'Invoices'}
+              </h1>
+              <p className="text-gray-500 text-sm">
+                {isSeller ? 'View invoices and discount offers from buyers' : 'Manage your invoices and discount offers'}
+              </p>
             </div>
           </div>
-          <button 
-            onClick={() => navigate('/invoices/create')}
-            className="flex items-center space-x-2 bg-blue-600 text-white px-4 py-2.5 rounded-lg hover:bg-blue-700 transition font-medium"
-          >
-            <Plus size={20} />
-            <span>Create Invoice</span>
-          </button>
+          {isBuyer && (
+            <button
+              onClick={() => navigate('/invoices/create')}
+              className="flex items-center space-x-2 bg-blue-600 text-white px-4 py-2.5 rounded-lg hover:bg-blue-700 transition font-medium"
+            >
+              <Plus size={20} />
+              <span>Create Invoice</span>
+            </button>
+          )}
         </div>
       </div>
 
@@ -662,7 +704,7 @@ export default function InvoicesPage() {
                 <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
                 <input
                   type="text"
-                  placeholder="Search by Invoice ID or Seller..."
+                  placeholder={`Search by Invoice ID or ${isSeller ? 'Buyer' : 'Seller'}...`}
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                   className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
@@ -682,13 +724,13 @@ export default function InvoicesPage() {
                 <option value="settled">Settled</option>
               </select>
               <select
-                value={sellerFilter}
-                onChange={(e) => setSellerFilter(e.target.value)}
+                value={counterpartyFilter}
+                onChange={(e) => setCounterpartyFilter(e.target.value)}
                 className="border border-gray-300 rounded-lg px-3 py-2 bg-white min-w-[180px]"
               >
-                <option value="all">All Sellers</option>
-                {uniqueSellers.map(seller => (
-                  <option key={seller} value={seller}>{seller}</option>
+                <option value="all">All {isSeller ? 'Buyers' : 'Sellers'}</option>
+                {uniqueCounterparties.map(name => (
+                  <option key={name} value={name}>{name}</option>
                 ))}
               </select>
               <button className="flex items-center space-x-2 px-3 py-2 border border-gray-300 rounded-lg hover:bg-gray-50">
@@ -698,8 +740,8 @@ export default function InvoicesPage() {
             </div>
           </div>
 
-          {/* Bulk Action Bar */}
-          {selectedInvoices.length > 0 && (
+          {/* Bulk Action Bar - Only for buyers */}
+          {isBuyer && selectedInvoices.length > 0 && (
             <div className="px-4 py-3 bg-blue-50 border-b border-blue-200 flex items-center justify-between">
               <div className="flex items-center space-x-3">
                 <span className="text-blue-800 font-medium">
@@ -730,7 +772,7 @@ export default function InvoicesPage() {
           <div className="px-4 py-3 bg-gray-50 flex items-center justify-between">
             <span className="text-sm text-gray-600">
               Showing <strong>{filteredInvoices.length}</strong> of {invoices.length} invoices
-              {eligibleInvoices.length > 0 && (
+              {isBuyer && eligibleInvoices.length > 0 && (
                 <span className="ml-2 text-blue-600">
                   ({eligibleInvoices.length} eligible for discount)
                 </span>
@@ -750,18 +792,20 @@ export default function InvoicesPage() {
             <table className="w-full">
               <thead className="bg-gray-50 border-b border-gray-200">
                 <tr>
-                  <th className="px-4 py-3 text-left">
-                    <input
-                      type="checkbox"
-                      className="rounded border-gray-300"
-                      checked={allEligibleSelected}
-                      onChange={(e) => handleSelectAll(e.target.checked)}
-                      disabled={eligibleInvoices.length === 0}
-                      title={eligibleInvoices.length === 0 ? 'No eligible invoices' : 'Select all eligible invoices'}
-                    />
-                  </th>
+                  {isBuyer && (
+                    <th className="px-4 py-3 text-left">
+                      <input
+                        type="checkbox"
+                        className="rounded border-gray-300"
+                        checked={allEligibleSelected}
+                        onChange={(e) => handleSelectAll(e.target.checked)}
+                        disabled={eligibleInvoices.length === 0}
+                        title={eligibleInvoices.length === 0 ? 'No eligible invoices' : 'Select all eligible invoices'}
+                      />
+                    </th>
+                  )}
                   <th className="px-4 py-3 text-left text-sm font-medium text-gray-600">Invoice</th>
-                  <th className="px-4 py-3 text-left text-sm font-medium text-gray-600">Seller</th>
+                  <th className="px-4 py-3 text-left text-sm font-medium text-gray-600">{isSeller ? 'Buyer' : 'Seller'}</th>
                   <th className="px-4 py-3 text-left text-sm font-medium text-gray-600">Amount</th>
                   <th className="px-4 py-3 text-left text-sm font-medium text-gray-600">Discount</th>
                   <th className="px-4 py-3 text-left text-sm font-medium text-gray-600">Due Date</th>
@@ -772,7 +816,7 @@ export default function InvoicesPage() {
               <tbody className="divide-y divide-gray-100">
                 {filteredInvoices.length === 0 ? (
                   <tr>
-                    <td colSpan="8" className="px-4 py-12 text-center">
+                    <td colSpan={isBuyer ? 8 : 7} className="px-4 py-12 text-center">
                       <FileText className="mx-auto text-gray-400 mb-4" size={48} />
                       <p className="text-gray-600 font-medium">No invoices found</p>
                       <p className="text-gray-500 text-sm mt-1">Create your first invoice to get started</p>
@@ -790,22 +834,27 @@ export default function InvoicesPage() {
                     const statusStyle = statusConfig[invoice.status] || statusConfig.DRAFT;
                     const eligible = isEligibleForDiscount(invoice);
                     const selected = isInvoiceSelected(invoice.id);
+                    // Show counterparty based on user type
+                    const counterpartyName = isSeller ? invoice.buyerName : invoice.sellerName;
+                    const counterpartyGstin = isSeller ? invoice.buyerGstin : invoice.sellerGstin;
                     return (
                       <tr
                         key={invoice.id}
                         onClick={() => navigate(`/invoices/${invoice.id}`)}
                         className={`hover:bg-gray-50 transition cursor-pointer ${selected ? 'bg-blue-50' : ''}`}
                       >
-                        <td className="px-4 py-4" onClick={(e) => e.stopPropagation()}>
-                          <input
-                            type="checkbox"
-                            className="rounded border-gray-300"
-                            checked={selected}
-                            onChange={(e) => handleSelectInvoice(invoice, e.target.checked)}
-                            disabled={!eligible}
-                            title={eligible ? 'Select for bulk discount' : 'Not eligible for discount offer'}
-                          />
-                        </td>
+                        {isBuyer && (
+                          <td className="px-4 py-4" onClick={(e) => e.stopPropagation()}>
+                            <input
+                              type="checkbox"
+                              className="rounded border-gray-300"
+                              checked={selected}
+                              onChange={(e) => handleSelectInvoice(invoice, e.target.checked)}
+                              disabled={!eligible}
+                              title={eligible ? 'Select for bulk discount' : 'Not eligible for discount offer'}
+                            />
+                          </td>
+                        )}
                         <td className="px-4 py-4">
                           <div>
                             <p className="font-medium text-gray-800">{invoice.invoiceNumber}</p>
@@ -814,8 +863,8 @@ export default function InvoicesPage() {
                         </td>
                         <td className="px-4 py-4">
                           <div>
-                            <p className="font-medium text-gray-800">{invoice.sellerName || 'N/A'}</p>
-                            <p className="text-sm text-gray-500 font-mono">{invoice.sellerGstin}</p>
+                            <p className="font-medium text-gray-800">{counterpartyName || 'N/A'}</p>
+                            <p className="text-sm text-gray-500 font-mono">{counterpartyGstin}</p>
                           </div>
                         </td>
                         <td className="px-4 py-4">
