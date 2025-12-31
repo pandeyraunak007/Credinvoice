@@ -104,6 +104,181 @@ const FundingTypeModal = ({ isOpen, onClose, invoice, onSelectFundingType, isLoa
   );
 };
 
+// Bulk Discount Modal
+const BulkDiscountModal = ({ isOpen, onClose, selectedInvoices, onSubmit, isLoading }) => {
+  const [discountPercentage, setDiscountPercentage] = useState('2');
+  const [earlyPaymentDays, setEarlyPaymentDays] = useState('15');
+  const [expiryHours, setExpiryHours] = useState('72');
+
+  if (!isOpen) return null;
+
+  const totalAmount = selectedInvoices.reduce((sum, inv) => sum + (inv.totalAmount || 0), 0);
+  const discountAmount = totalAmount * (parseFloat(discountPercentage) || 0) / 100;
+  const netAmount = totalAmount - discountAmount;
+
+  const handleSubmit = () => {
+    onSubmit({
+      discountPercentage: parseFloat(discountPercentage),
+      earlyPaymentDays: parseInt(earlyPaymentDays),
+      expiryHours: parseInt(expiryHours),
+    });
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+      <div className="bg-white rounded-2xl max-w-2xl w-full mx-4 overflow-hidden shadow-2xl">
+        <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between bg-gradient-to-r from-blue-50 to-purple-50">
+          <div>
+            <h3 className="text-lg font-semibold text-gray-800">Bulk Discount Offer</h3>
+            <p className="text-sm text-gray-500">{selectedInvoices.length} invoices selected</p>
+          </div>
+          <button onClick={onClose} className="p-1 hover:bg-gray-100 rounded-lg">
+            <X size={20} className="text-gray-500" />
+          </button>
+        </div>
+
+        <div className="p-6">
+          {/* Selected Invoices Summary */}
+          <div className="bg-gray-50 rounded-xl p-4 mb-6">
+            <h4 className="text-sm font-medium text-gray-600 mb-3">Selected Invoices</h4>
+            <div className="max-h-32 overflow-y-auto space-y-2">
+              {selectedInvoices.map(inv => (
+                <div key={inv.id} className="flex items-center justify-between text-sm">
+                  <div className="flex items-center space-x-2">
+                    <FileText size={14} className="text-gray-400" />
+                    <span className="text-gray-800">{inv.invoiceNumber}</span>
+                    <span className="text-gray-400">•</span>
+                    <span className="text-gray-600">{inv.sellerName}</span>
+                  </div>
+                  <span className="font-medium text-gray-800">
+                    ₹{(inv.totalAmount / 100000).toFixed(2)}L
+                  </span>
+                </div>
+              ))}
+            </div>
+            <div className="border-t border-gray-200 mt-3 pt-3 flex justify-between">
+              <span className="font-medium text-gray-700">Total Value</span>
+              <span className="font-bold text-gray-800">₹{(totalAmount / 100000).toFixed(2)}L</span>
+            </div>
+          </div>
+
+          {/* Discount Settings */}
+          <div className="grid grid-cols-3 gap-4 mb-6">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Discount Rate (%)
+              </label>
+              <input
+                type="number"
+                min="0.5"
+                max="10"
+                step="0.5"
+                value={discountPercentage}
+                onChange={(e) => setDiscountPercentage(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Early Payment (Days)
+              </label>
+              <select
+                value={earlyPaymentDays}
+                onChange={(e) => setEarlyPaymentDays(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              >
+                <option value="7">7 days</option>
+                <option value="10">10 days</option>
+                <option value="15">15 days</option>
+                <option value="21">21 days</option>
+                <option value="30">30 days</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Offer Expires In
+              </label>
+              <select
+                value={expiryHours}
+                onChange={(e) => setExpiryHours(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              >
+                <option value="24">24 hours</option>
+                <option value="48">48 hours</option>
+                <option value="72">72 hours</option>
+                <option value="120">5 days</option>
+                <option value="168">7 days</option>
+              </select>
+            </div>
+          </div>
+
+          {/* Calculation Summary */}
+          <div className="bg-green-50 border border-green-200 rounded-xl p-4 mb-6">
+            <h4 className="text-sm font-medium text-green-800 mb-3">Discount Summary</h4>
+            <div className="grid grid-cols-3 gap-4 text-center">
+              <div>
+                <p className="text-sm text-green-600">Total Invoice Value</p>
+                <p className="text-xl font-bold text-gray-800">₹{(totalAmount / 100000).toFixed(2)}L</p>
+              </div>
+              <div>
+                <p className="text-sm text-green-600">Total Discount</p>
+                <p className="text-xl font-bold text-green-600">-₹{(discountAmount / 100000).toFixed(2)}L</p>
+              </div>
+              <div>
+                <p className="text-sm text-green-600">You'll Pay</p>
+                <p className="text-xl font-bold text-gray-800">₹{(netAmount / 100000).toFixed(2)}L</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Info Box */}
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-6">
+            <div className="flex items-start space-x-2">
+              <AlertCircle size={16} className="text-blue-600 mt-0.5" />
+              <div className="text-sm text-blue-800">
+                <p className="font-medium">How it works:</p>
+                <ul className="mt-1 space-y-1 text-blue-700">
+                  <li>• Each seller will receive an individual discount offer</li>
+                  <li>• Sellers have until the expiry time to accept or reject</li>
+                  <li>• After acceptance, you'll choose the funding method for each invoice</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+
+          {/* Actions */}
+          <div className="flex items-center justify-end space-x-3">
+            <button
+              onClick={onClose}
+              disabled={isLoading}
+              className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 font-medium disabled:opacity-50"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleSubmit}
+              disabled={isLoading || !discountPercentage || selectedInvoices.length === 0}
+              className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium disabled:opacity-50 flex items-center space-x-2"
+            >
+              {isLoading ? (
+                <>
+                  <Loader2 size={18} className="animate-spin" />
+                  <span>Creating Offers...</span>
+                </>
+              ) : (
+                <>
+                  <Send size={18} />
+                  <span>Send {selectedInvoices.length} Offer{selectedInvoices.length > 1 ? 's' : ''}</span>
+                </>
+              )}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 export default function InvoicesPage() {
   const navigate = useNavigate();
   const [invoices, setInvoices] = useState([]);
@@ -118,6 +293,10 @@ export default function InvoicesPage() {
   // Funding type modal state
   const [fundingModal, setFundingModal] = useState({ isOpen: false, invoice: null });
   const [fundingLoading, setFundingLoading] = useState(false);
+
+  // Bulk discount modal state
+  const [bulkDiscountModal, setBulkDiscountModal] = useState(false);
+  const [bulkDiscountLoading, setBulkDiscountLoading] = useState(false);
 
   const fetchInvoices = async () => {
     try {
@@ -209,6 +388,92 @@ export default function InvoicesPage() {
       alert(err.message || 'Failed to select funding type');
     } finally {
       setFundingLoading(false);
+    }
+  };
+
+  // Invoice selection handlers
+  const handleSelectInvoice = (invoice, isSelected) => {
+    if (isSelected) {
+      setSelectedInvoices(prev => [...prev, invoice]);
+    } else {
+      setSelectedInvoices(prev => prev.filter(inv => inv.id !== invoice.id));
+    }
+  };
+
+  const handleSelectAll = (isSelected) => {
+    if (isSelected) {
+      // Only select invoices that are eligible for discount (DRAFT or no discount offer yet)
+      const eligibleInvoices = filteredInvoices.filter(inv =>
+        inv.status === 'DRAFT' || (inv.status !== 'SETTLED' && inv.status !== 'REJECTED' && !inv.discountOffer)
+      );
+      setSelectedInvoices(eligibleInvoices);
+    } else {
+      setSelectedInvoices([]);
+    }
+  };
+
+  const isInvoiceSelected = (invoiceId) => {
+    return selectedInvoices.some(inv => inv.id === invoiceId);
+  };
+
+  // Check if invoice is eligible for bulk discount
+  const isEligibleForDiscount = (invoice) => {
+    return invoice.status === 'DRAFT' ||
+           (invoice.status !== 'SETTLED' && invoice.status !== 'REJECTED' && !invoice.discountOffer);
+  };
+
+  // Get eligible invoices from filtered list
+  const eligibleInvoices = filteredInvoices.filter(isEligibleForDiscount);
+  const allEligibleSelected = eligibleInvoices.length > 0 &&
+    eligibleInvoices.every(inv => isInvoiceSelected(inv.id));
+
+  // Bulk discount submission handler
+  const handleBulkDiscountSubmit = async (discountParams) => {
+    setBulkDiscountLoading(true);
+
+    const results = { success: [], failed: [] };
+
+    try {
+      // Create discount offers for each selected invoice
+      for (const invoice of selectedInvoices) {
+        try {
+          const earlyPaymentDate = new Date();
+          earlyPaymentDate.setDate(earlyPaymentDate.getDate() + discountParams.earlyPaymentDays);
+
+          const expiresAt = new Date();
+          expiresAt.setHours(expiresAt.getHours() + discountParams.expiryHours);
+
+          await discountService.createOffer({
+            invoiceId: invoice.id,
+            discountPercentage: discountParams.discountPercentage,
+            earlyPaymentDate: earlyPaymentDate.toISOString(),
+            expiresAt: expiresAt.toISOString(),
+          });
+
+          results.success.push(invoice.invoiceNumber);
+        } catch (err) {
+          console.error(`Failed to create offer for ${invoice.invoiceNumber}:`, err);
+          results.failed.push({ invoice: invoice.invoiceNumber, error: err.message });
+        }
+      }
+
+      // Show results
+      if (results.success.length > 0) {
+        alert(`Successfully created ${results.success.length} discount offer(s)!\n${
+          results.failed.length > 0 ? `\nFailed: ${results.failed.length} invoice(s)` : ''
+        }`);
+      } else if (results.failed.length > 0) {
+        alert(`Failed to create discount offers:\n${results.failed.map(f => `${f.invoice}: ${f.error}`).join('\n')}`);
+      }
+
+      setBulkDiscountModal(false);
+      setSelectedInvoices([]);
+      fetchInvoices();
+    } catch (err) {
+      console.error('Bulk discount submission failed:', err);
+      alert(err.message || 'Failed to create discount offers');
+    } finally {
+      setBulkDiscountLoading(false);
     }
   };
 
@@ -433,9 +698,43 @@ export default function InvoicesPage() {
             </div>
           </div>
 
+          {/* Bulk Action Bar */}
+          {selectedInvoices.length > 0 && (
+            <div className="px-4 py-3 bg-blue-50 border-b border-blue-200 flex items-center justify-between">
+              <div className="flex items-center space-x-3">
+                <span className="text-blue-800 font-medium">
+                  {selectedInvoices.length} invoice{selectedInvoices.length > 1 ? 's' : ''} selected
+                </span>
+                <span className="text-blue-600 text-sm">
+                  (Total: ₹{(selectedInvoices.reduce((sum, inv) => sum + (inv.totalAmount || 0), 0) / 100000).toFixed(2)}L)
+                </span>
+              </div>
+              <div className="flex items-center space-x-2">
+                <button
+                  onClick={() => setSelectedInvoices([])}
+                  className="px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-100 rounded-lg"
+                >
+                  Clear Selection
+                </button>
+                <button
+                  onClick={() => setBulkDiscountModal(true)}
+                  className="flex items-center space-x-2 px-4 py-1.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium"
+                >
+                  <CreditCard size={16} />
+                  <span>Create Bulk Discount Offer</span>
+                </button>
+              </div>
+            </div>
+          )}
+
           <div className="px-4 py-3 bg-gray-50 flex items-center justify-between">
             <span className="text-sm text-gray-600">
               Showing <strong>{filteredInvoices.length}</strong> of {invoices.length} invoices
+              {eligibleInvoices.length > 0 && (
+                <span className="ml-2 text-blue-600">
+                  ({eligibleInvoices.length} eligible for discount)
+                </span>
+              )}
             </span>
             <button
               onClick={fetchInvoices}
@@ -452,7 +751,14 @@ export default function InvoicesPage() {
               <thead className="bg-gray-50 border-b border-gray-200">
                 <tr>
                   <th className="px-4 py-3 text-left">
-                    <input type="checkbox" className="rounded border-gray-300" />
+                    <input
+                      type="checkbox"
+                      className="rounded border-gray-300"
+                      checked={allEligibleSelected}
+                      onChange={(e) => handleSelectAll(e.target.checked)}
+                      disabled={eligibleInvoices.length === 0}
+                      title={eligibleInvoices.length === 0 ? 'No eligible invoices' : 'Select all eligible invoices'}
+                    />
                   </th>
                   <th className="px-4 py-3 text-left text-sm font-medium text-gray-600">Invoice</th>
                   <th className="px-4 py-3 text-left text-sm font-medium text-gray-600">Seller</th>
@@ -482,14 +788,23 @@ export default function InvoicesPage() {
                   filteredInvoices.map((invoice) => {
                     const StatusIcon = statusConfig[invoice.status]?.icon || FileText;
                     const statusStyle = statusConfig[invoice.status] || statusConfig.DRAFT;
+                    const eligible = isEligibleForDiscount(invoice);
+                    const selected = isInvoiceSelected(invoice.id);
                     return (
                       <tr
                         key={invoice.id}
                         onClick={() => navigate(`/invoices/${invoice.id}`)}
-                        className="hover:bg-gray-50 transition cursor-pointer"
+                        className={`hover:bg-gray-50 transition cursor-pointer ${selected ? 'bg-blue-50' : ''}`}
                       >
                         <td className="px-4 py-4" onClick={(e) => e.stopPropagation()}>
-                          <input type="checkbox" className="rounded border-gray-300" />
+                          <input
+                            type="checkbox"
+                            className="rounded border-gray-300"
+                            checked={selected}
+                            onChange={(e) => handleSelectInvoice(invoice, e.target.checked)}
+                            disabled={!eligible}
+                            title={eligible ? 'Select for bulk discount' : 'Not eligible for discount offer'}
+                          />
                         </td>
                         <td className="px-4 py-4">
                           <div>
@@ -563,6 +878,15 @@ export default function InvoicesPage() {
         invoice={fundingModal.invoice}
         onSelectFundingType={handleSelectFundingType}
         isLoading={fundingLoading}
+      />
+
+      {/* Bulk Discount Modal */}
+      <BulkDiscountModal
+        isOpen={bulkDiscountModal}
+        onClose={() => setBulkDiscountModal(false)}
+        selectedInvoices={selectedInvoices}
+        onSubmit={handleBulkDiscountSubmit}
+        isLoading={bulkDiscountLoading}
       />
     </div>
   );
