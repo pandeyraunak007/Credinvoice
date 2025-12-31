@@ -146,3 +146,25 @@ export const selectFundingType = asyncHandler(async (req: Request, res: Response
 
   return sendSuccess(res, offer, message);
 });
+
+// Revise rejected offer (Buyer)
+export const reviseOffer = asyncHandler(async (req: Request, res: Response) => {
+  if (!req.user) {
+    return sendError(res, 'Not authenticated', 401);
+  }
+
+  const { offerId } = req.params;
+  const offer = await discountService.reviseOffer(
+    offerId,
+    req.user.userId,
+    req.body
+  );
+
+  return sendSuccess(res, offer, 'Offer revised and sent back to seller for review');
+});
+
+// Check expired offers (can be called by cron job)
+export const checkExpiredOffers = asyncHandler(async (req: Request, res: Response) => {
+  const result = await discountService.checkExpiredOffers();
+  return sendSuccess(res, result, `Marked ${result.expiredCount} offers as expired`);
+});

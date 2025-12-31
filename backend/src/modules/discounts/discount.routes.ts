@@ -7,6 +7,7 @@ import {
   respondDiscountOfferSchema,
   authorizePaymentSchema,
   selectFundingTypeSchema,
+  reviseOfferSchema,
 } from './discount.validation';
 import {
   createDiscountOffer,
@@ -18,6 +19,8 @@ import {
   cancelOffer,
   authorizePayment,
   selectFundingType,
+  reviseOffer,
+  checkExpiredOffers,
 } from './discount.controller';
 
 const router = Router();
@@ -42,6 +45,12 @@ router.post(
   validateBody(selectFundingTypeSchema),
   selectFundingType
 );
+router.post(
+  '/:offerId/revise',
+  buyerOnly,
+  validateBody(reviseOfferSchema),
+  reviseOffer
+);
 
 // Seller routes
 router.get('/pending', sellerOnly, getSellerPendingOffers);
@@ -54,5 +63,8 @@ router.post(
 
 // Common routes
 router.get('/:offerId', getDiscountOffer);
+
+// Admin/cron route to check expired offers
+router.post('/check-expired', checkExpiredOffers);
 
 export default router;
