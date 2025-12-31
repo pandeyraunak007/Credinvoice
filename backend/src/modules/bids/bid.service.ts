@@ -1,6 +1,7 @@
 import { BidStatus, InvoiceStatus } from '@prisma/client';
 import { prisma } from '../../config/database';
 import { AppError } from '../../middleware/errorHandler';
+import { emailService } from '../../services/email.service';
 import { CreateBidInput, UpdateBidInput, ListBidsQuery } from './bid.validation';
 
 export class BidService {
@@ -78,6 +79,24 @@ export class BidService {
         status: 'PENDING',
       },
     });
+
+    // Send email notification to buyer (async, don't wait)
+    if (invoice.buyerId) {
+      const buyer = await prisma.buyer.findUnique({
+        where: { id: invoice.buyerId },
+        include: { user: { select: { email: true } } },
+      });
+
+      if (buyer?.user?.email) {
+        emailService.sendBidReceived(buyer.user.email, {
+          buyerName: buyer.companyName || 'Buyer',
+          financierName: financier.companyName || 'Financier',
+          invoiceNumber: invoice.invoiceNumber,
+          bidRate: data.discountRate,
+          bidAmount: netAmount,
+        }).catch(err => console.error('Failed to send bid notification email:', err));
+      }
+    }
 
     return bid;
   }
