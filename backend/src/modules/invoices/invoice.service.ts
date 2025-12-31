@@ -181,25 +181,36 @@ export class InvoiceService {
     if (userType !== 'ADMIN') {
       const { entityId, entityType } = await this.getEntityInfo(userId, userType);
 
+      // Ensure entityId is valid before building query
+      if (!entityId) {
+        throw new AppError('Invalid user profile', 400);
+      }
+
       switch (entityType) {
         case 'BUYER':
+          // Buyer sees invoices where they are the buyer OR they uploaded
           where.OR = [
             { buyerId: entityId },
-            { uploadedById: entityId, uploadedByType: 'BUYER' },
+            { AND: [{ uploadedById: entityId }, { uploadedByType: 'BUYER' }] },
           ];
           break;
         case 'SELLER':
+          // Seller sees ONLY invoices where they are the seller OR they uploaded
           where.OR = [
             { sellerId: entityId },
-            { uploadedById: entityId, uploadedByType: 'SELLER' },
+            { AND: [{ uploadedById: entityId }, { uploadedByType: 'SELLER' }] },
           ];
           break;
         case 'FINANCIER':
-          // Financiers see invoices open for bidding or their bids
+          // Financiers see invoices open for bidding or where they have bids
           where.OR = [
-            { status: 'OPEN_FOR_BIDDING' },
+            { status: 'OPEN_FOR_BIDDING' as InvoiceStatus },
             { bids: { some: { financierId: entityId } } },
           ];
+          break;
+        default:
+          // Unknown entity type - return no invoices for safety
+          where.id = 'no-match-invalid-entity-type';
           break;
       }
     }
