@@ -344,6 +344,43 @@ const MarkCompletedModal = ({ isOpen, onClose, investment, onMarkCompleted, isLo
   );
 };
 
+// Success/Error Modal Component
+const ResultModal = ({ isOpen, onClose, title, message, isError = false }) => {
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+      <div className="bg-white rounded-2xl max-w-md w-full mx-4 overflow-hidden shadow-2xl">
+        <div className="p-6 text-center">
+          <div className={`w-16 h-16 mx-auto mb-4 rounded-full flex items-center justify-center ${
+            isError ? 'bg-red-100' : 'bg-green-100'
+          }`}>
+            {isError ? (
+              <X size={32} className="text-red-600" />
+            ) : (
+              <CheckCircle size={32} className="text-green-600" />
+            )}
+          </div>
+          <h3 className={`text-xl font-semibold mb-2 ${isError ? 'text-red-800' : 'text-gray-800'}`}>
+            {title}
+          </h3>
+          <p className="text-gray-600 mb-6">{message}</p>
+          <button
+            onClick={onClose}
+            className={`w-full px-4 py-3 rounded-lg font-medium ${
+              isError
+                ? 'bg-red-600 text-white hover:bg-red-700'
+                : 'bg-green-600 text-white hover:bg-green-700'
+            }`}
+          >
+            {isError ? 'Close' : 'Done'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 export default function Portfolio() {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
@@ -365,6 +402,7 @@ export default function Portfolio() {
   // Modal states
   const [processModal, setProcessModal] = useState({ open: false, investment: null });
   const [completedModal, setCompletedModal] = useState({ open: false, investment: null });
+  const [successModal, setSuccessModal] = useState({ open: false, message: '', title: '' });
   const [actionLoading, setActionLoading] = useState(false);
 
   const fetchPortfolio = async () => {
@@ -505,10 +543,18 @@ export default function Portfolio() {
       });
       setProcessModal({ open: false, investment: null });
       await fetchPortfolio();
-      alert('Disbursement initiated successfully! Funds will be transferred to the seller.');
+      setSuccessModal({
+        open: true,
+        title: 'Disbursement Initiated',
+        message: `Funds of ₹${(investment.disbursedAmount / 100000).toFixed(2)}L will be transferred to ${investment.seller}. You can track the status in your portfolio.`
+      });
     } catch (err) {
       console.error('Failed to process disbursement:', err);
-      alert(err.message || 'Failed to process disbursement');
+      setSuccessModal({
+        open: true,
+        title: 'Disbursement Failed',
+        message: err.message || 'Failed to process disbursement. Please try again.'
+      });
     } finally {
       setActionLoading(false);
     }
@@ -518,16 +564,24 @@ export default function Portfolio() {
   const handleMarkCompleted = async (investment, reference) => {
     setActionLoading(true);
     try {
-      await disbursementService.updateStatus(investment.id, {
+      await disbursementService.updateStatus(investment.disbursementId || investment.id, {
         status: 'COMPLETED',
         transactionReference: reference || undefined
       });
       setCompletedModal({ open: false, investment: null });
       await fetchPortfolio();
-      alert('Disbursement marked as completed!');
+      setSuccessModal({
+        open: true,
+        title: 'Disbursement Completed',
+        message: `Payment to ${investment.seller} has been marked as completed. The funds are now with the seller.`
+      });
     } catch (err) {
       console.error('Failed to update disbursement:', err);
-      alert(err.message || 'Failed to update disbursement status');
+      setSuccessModal({
+        open: true,
+        title: 'Update Failed',
+        message: err.message || 'Failed to update disbursement status. Please try again.'
+      });
     } finally {
       setActionLoading(false);
     }
@@ -840,6 +894,14 @@ export default function Portfolio() {
         investment={completedModal.investment}
         onMarkCompleted={handleMarkCompleted}
         isLoading={actionLoading}
+      />
+
+      <ResultModal
+        isOpen={successModal.open}
+        onClose={() => setSuccessModal({ open: false, title: '', message: '' })}
+        title={successModal.title}
+        message={successModal.message}
+        isError={successModal.title?.toLowerCase().includes('failed') || successModal.title?.toLowerCase().includes('error')}
       />
     </div>
   );
