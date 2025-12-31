@@ -223,6 +223,9 @@ export function SellerDashboard() {
             <Link to="/seller" className="flex items-center space-x-3 px-3 py-2.5 text-gray-700 hover:bg-gray-50 rounded-lg">
               <Wallet size={20} /><span>Payments</span>
             </Link>
+            <Link to="/seller/contracts" className="flex items-center space-x-3 px-3 py-2.5 text-gray-700 hover:bg-gray-50 rounded-lg">
+              <FileText size={20} /><span>Contracts</span>
+            </Link>
             <Link to="/seller" className="flex items-center space-x-3 px-3 py-2.5 text-gray-700 hover:bg-gray-50 rounded-lg">
               <History size={20} /><span>Repayments</span>
             </Link>

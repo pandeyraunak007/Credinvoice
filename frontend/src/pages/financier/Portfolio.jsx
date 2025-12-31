@@ -11,8 +11,9 @@ import { bidService, disbursementService, profileService } from '../../services/
 const StatusBadge = ({ status }) => {
   const config = {
     disbursed: { label: 'Disbursed', color: 'bg-green-100 text-green-700' },
-    pending_disbursement: { label: 'Pending Disbursement', color: 'bg-yellow-100 text-yellow-700' },
-    collected: { label: 'Collected', color: 'bg-blue-100 text-blue-700' },
+    pending_disbursement: { label: 'Awaiting Disbursement', color: 'bg-yellow-100 text-yellow-700' },
+    processing: { label: 'Processing', color: 'bg-blue-100 text-blue-700' },
+    collected: { label: 'Collected', color: 'bg-gray-100 text-gray-700' },
     overdue: { label: 'Overdue', color: 'bg-red-100 text-red-700' },
   };
   const { label, color } = config[status] || config.disbursed;
@@ -370,10 +371,46 @@ export default function Portfolio() {
       const disbursementsResponse = await disbursementService.list();
       const disbursements = disbursementsResponse.data || [];
 
+      // Create a set of invoice IDs that have disbursements
+      const disbursedInvoiceIds = new Set(disbursements.map(d => d.invoiceId));
+
       // Transform to active and collected investments
       const active = [];
       const collected = [];
 
+      // First, add accepted bids that DON'T have disbursements yet (pending disbursement)
+      acceptedBids.forEach(bid => {
+        const inv = bid.invoice || {};
+        // Skip if this invoice already has a disbursement
+        if (disbursedInvoiceIds.has(inv.id)) return;
+
+        const dueDate = new Date(inv.dueDate);
+        const now = new Date();
+        const daysLeft = Math.ceil((dueDate - now) / (1000 * 60 * 60 * 24));
+        const expectedReturn = (inv.totalAmount * (bid.discountRate || 0) / 365) * daysLeft;
+
+        active.push({
+          id: bid.id,
+          bidId: bid.id,
+          originalInvoiceId: inv.id,
+          invoiceId: inv.invoiceNumber || inv.id,
+          buyer: inv.buyerName || 'Unknown Buyer',
+          seller: inv.sellerName || 'Unknown Seller',
+          amount: inv.totalAmount || 0,
+          disbursedAmount: bid.netAmount || 0,
+          myRate: bid.discountRate || 0,
+          dueDate: dueDate.toLocaleDateString('en-IN'),
+          disbursedDate: null,
+          daysLeft: Math.max(0, daysLeft),
+          status: 'pending_disbursement',
+          buyerRating: 'A',
+          expectedReturn: expectedReturn,
+          daysOverdue: 0,
+          isPendingBid: true // Flag to indicate this is an accepted bid awaiting disbursement
+        });
+      });
+
+      // Then, add disbursements
       disbursements.forEach(d => {
         const inv = d.invoice || {};
         const dueDate = new Date(inv.dueDate);
@@ -383,7 +420,9 @@ export default function Portfolio() {
 
         const investment = {
           id: d.id,
+          disbursementId: d.id,
           invoiceId: inv.invoiceNumber || d.invoiceId,
+          originalInvoiceId: inv.id || d.invoiceId,
           buyer: inv.buyerName || 'Unknown Buyer',
           seller: inv.sellerName || 'Unknown Seller',
           amount: inv.totalAmount || 0,
@@ -393,11 +432,12 @@ export default function Portfolio() {
           disbursedDate: d.disbursedAt ? new Date(d.disbursedAt).toLocaleDateString('en-IN') : null,
           daysLeft: Math.max(0, daysLeft),
           status: d.status === 'COMPLETED' ? 'collected' :
-                  d.status === 'PENDING' ? 'pending_disbursement' :
+                  d.status === 'PENDING' ? 'processing' :
                   daysLeft < 0 ? 'overdue' : 'disbursed',
           buyerRating: 'A',
           expectedReturn: expectedReturn,
-          daysOverdue: daysLeft < 0 ? Math.abs(daysLeft) : 0
+          daysOverdue: daysLeft < 0 ? Math.abs(daysLeft) : 0,
+          isPendingBid: false
         };
 
         if (d.status === 'COMPLETED') {
@@ -417,9 +457,9 @@ export default function Portfolio() {
       setCollectedInvestments(collected);
 
       // Calculate stats
-      const totalActive = active.reduce((sum, a) => sum + a.disbursedAmount, 0) / 10000000;
+      const totalActive = active.filter(a => a.status !== 'pending_disbursement').reduce((sum, a) => sum + a.disbursedAmount, 0) / 10000000;
       const totalCollected = collected.reduce((sum, c) => sum + c.collected, 0) / 10000000;
-      const pendingDisbursement = active.filter(a => a.status === 'pending_disbursement').reduce((sum, a) => sum + a.amount, 0) / 100000;
+      const pendingDisbursement = active.filter(a => a.status === 'pending_disbursement').reduce((sum, a) => sum + a.disbursedAmount, 0) / 100000;
       const overdue = active.filter(a => a.status === 'overdue').reduce((sum, a) => sum + a.amount, 0) / 100000;
 
       setPortfolioStats({
@@ -447,15 +487,18 @@ export default function Portfolio() {
   const handleProcessDisbursement = async (investment, bankAccountId) => {
     setActionLoading(true);
     try {
-      // For financier-funded disbursements
+      // For financier-funded disbursements - use bidId for accepted bids
+      const invoiceId = investment.originalInvoiceId;
+      const bidId = investment.bidId || investment.id; // For pending bids, the id IS the bidId
+
       await disbursementService.initiateFinancier({
-        invoiceId: investment.originalInvoiceId || investment.invoiceId,
-        bidId: investment.bidId,
+        invoiceId: invoiceId,
+        bidId: bidId,
         bankAccountId: bankAccountId
       });
       setProcessModal({ open: false, investment: null });
       await fetchPortfolio();
-      alert('Disbursement processed successfully! Funds will be transferred to the seller.');
+      alert('Disbursement initiated successfully! Funds will be transferred to the seller.');
     } catch (err) {
       console.error('Failed to process disbursement:', err);
       alert(err.message || 'Failed to process disbursement');
@@ -682,16 +725,21 @@ export default function Portfolio() {
                               onClick={() => setProcessModal({ open: true, investment: inv })}
                               className="px-3 py-1.5 bg-purple-600 text-white rounded-lg text-sm font-medium hover:bg-purple-700"
                             >
-                              Process
+                              Disburse Funds
                             </button>
                           )}
-                          {inv.status === 'disbursed' && (
+                          {inv.status === 'processing' && (
                             <button
                               onClick={() => setCompletedModal({ open: true, investment: inv })}
-                              className="px-3 py-1.5 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700"
+                              className="px-3 py-1.5 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700"
                             >
-                              Mark Done
+                              Mark Sent
                             </button>
+                          )}
+                          {(inv.status === 'disbursed' || inv.status === 'overdue') && (
+                            <span className="px-3 py-1.5 bg-gray-100 text-gray-600 rounded-lg text-sm">
+                              Awaiting Repayment
+                            </span>
                           )}
                           <button className="p-2 hover:bg-gray-100 rounded-lg">
                             <Eye size={18} className="text-gray-500" />

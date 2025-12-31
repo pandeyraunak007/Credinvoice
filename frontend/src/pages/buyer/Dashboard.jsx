@@ -346,6 +346,10 @@ export default function BuyerDashboard() {
               <BarChart3 size={20} />
               <span>Analytics</span>
             </Link>
+            <Link to="/contracts" className="flex items-center space-x-3 px-3 py-2.5 text-gray-700 hover:bg-gray-50 rounded-lg">
+              <FileText size={20} />
+              <span>Contracts</span>
+            </Link>
             <Link to="/invoices" className="flex items-center space-x-3 px-3 py-2.5 text-gray-700 hover:bg-gray-50 rounded-lg">
               <Building2 size={20} />
               <span>Reports</span>
