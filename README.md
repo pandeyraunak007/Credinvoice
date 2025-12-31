@@ -32,3 +32,4 @@ The financier funds MSMEs against invoices provided by Buyers. Buyers get discou
 ## License
 
 Proprietary
+Last deployed: December 31, 2025
