@@ -2,6 +2,7 @@ import { BidStatus, InvoiceStatus } from '@prisma/client';
 import { prisma } from '../../config/database';
 import { AppError } from '../../middleware/errorHandler';
 import { emailService } from '../../services/email.service';
+import { contractService } from '../contracts/contract.service';
 import { CreateBidInput, UpdateBidInput, ListBidsQuery } from './bid.validation';
 
 export class BidService {
@@ -367,7 +368,20 @@ export class BidService {
       return acceptedBid;
     });
 
-    return result;
+    // Generate 3-party contract for financier-funded discount
+    let contract = null;
+    try {
+      // Get buyer ID for contract generation
+      const buyerId = bid.invoice.buyer?.id;
+      if (buyerId) {
+        contract = await contractService.generateThreePartyContract(bidId, buyerId);
+      }
+    } catch (err) {
+      console.error('Failed to generate contract:', err);
+      // Don't fail bid acceptance if contract generation fails
+    }
+
+    return { bid: result, contract };
   }
 }
 

@@ -372,6 +372,60 @@ model Disbursement {
 }
 
 // ============================================
+// CONTRACTS
+// ============================================
+
+model Contract {
+  id                 String         @id @default(uuid())
+  contractNumber     String         @unique @map("contract_number")
+  contractType       ContractType   @map("contract_type")
+  status             ContractStatus @default(ACTIVE)
+
+  // Related entities
+  invoiceId          String         @map("invoice_id")
+  discountOfferId    String?        @map("discount_offer_id")
+  bidId              String?        @map("bid_id")
+
+  // Parties
+  buyerId            String         @map("buyer_id")
+  sellerId           String         @map("seller_id")
+  financierId        String?        @map("financier_id")
+
+  // Invoice details (denormalized for contract)
+  invoiceNumber      String         @map("invoice_number")
+  invoiceDate        DateTime       @map("invoice_date")
+  invoiceAmount      Float          @map("invoice_amount")
+  dueDate            DateTime       @map("due_date")
+
+  // Discount details
+  discountPercentage Float          @map("discount_percentage")
+  discountAmount     Float          @map("discount_amount")
+  earlyPaymentDate   DateTime       @map("early_payment_date")
+
+  // Payment amounts
+  sellerReceives     Float          @map("seller_receives")
+  buyerPays          Float?         @map("buyer_pays")           // For self-funded
+  financierPays      Float?         @map("financier_pays")       // For financier-funded
+  buyerRepays        Float?         @map("buyer_repays")         // For financier-funded
+  repaymentDueDate   DateTime?      @map("repayment_due_date")   // For financier-funded
+
+  // Financier terms (for 3-party)
+  financierRate      Float?         @map("financier_rate")
+  financierFee       Float?         @map("financier_fee")
+
+  // PDF document
+  pdfUrl             String?        @map("pdf_url")
+
+  // Timestamps
+  generatedAt        DateTime       @default(now()) @map("generated_at")
+  completedAt        DateTime?      @map("completed_at")
+  createdAt          DateTime       @default(now()) @map("created_at")
+  updatedAt          DateTime       @updatedAt @map("updated_at")
+
+  @@map("contracts")
+}
+
+// ============================================
 // REPAYMENTS
 // ============================================
 
@@ -568,6 +622,17 @@ enum RepaymentStatus {
   DEFAULTED
 }
 
+enum ContractType {
+  TWO_PARTY     // Self-funded: Buyer + Seller
+  THREE_PARTY   // Financier-funded: Buyer + Seller + Financier
+}
+
+enum ContractStatus {
+  ACTIVE
+  COMPLETED
+  CANCELLED
+}
+
 enum NotificationType {
   KYC_SUBMITTED
   KYC_APPROVED
@@ -582,5 +647,6 @@ enum NotificationType {
   FUNDS_DISBURSED
   REPAYMENT_DUE
   REPAYMENT_RECEIVED
+  CONTRACT_GENERATED
   SYSTEM_ALERT
 }
