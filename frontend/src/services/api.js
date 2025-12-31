@@ -527,6 +527,50 @@ export const notificationService = {
     }),
 };
 
+// Contract Service
+export const contractService = {
+  // Get all contracts for the current user
+  list: (params = {}) => {
+    const query = new URLSearchParams(params).toString();
+    return apiRequest(`/contracts${query ? `?${query}` : ''}`);
+  },
+
+  // Get contract by ID
+  getById: (id) => apiRequest(`/contracts/${id}`),
+
+  // Get contract text (for display)
+  getText: (id) => apiRequest(`/contracts/${id}/text`),
+
+  // Download contract as file
+  download: async (id) => {
+    const token = localStorage.getItem('accessToken');
+    const response = await fetch(`${API_BASE_URL}/contracts/${id}/download`, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error('Failed to download contract');
+    }
+
+    const blob = await response.blob();
+    const contentDisposition = response.headers.get('Content-Disposition');
+    const filenameMatch = contentDisposition?.match(/filename="(.+)"/);
+    const filename = filenameMatch ? filenameMatch[1] : `contract-${id}.txt`;
+
+    // Create download link
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    window.URL.revokeObjectURL(url);
+    document.body.removeChild(a);
+  },
+};
+
 export default {
   auth: authService,
   profile: profileService,
@@ -538,4 +582,5 @@ export default {
   admin: adminService,
   analytics: analyticsService,
   notification: notificationService,
+  contract: contractService,
 };

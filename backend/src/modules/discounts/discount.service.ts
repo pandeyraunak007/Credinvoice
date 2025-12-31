@@ -2,6 +2,7 @@ import { DiscountOfferStatus, FundingType, InvoiceStatus } from '@prisma/client'
 import { prisma } from '../../config/database';
 import { AppError } from '../../middleware/errorHandler';
 import { emailService } from '../../services/email.service';
+import { contractService } from '../contracts/contract.service';
 import {
   CreateDiscountOfferInput,
   UpdateDiscountOfferInput,
@@ -613,7 +614,16 @@ export class DiscountService {
       return disb;
     });
 
-    return disbursement;
+    // Generate 2-party contract for self-funded discount
+    let contract = null;
+    try {
+      contract = await contractService.generateTwoPartyContract(offerId, buyer.id);
+    } catch (err) {
+      console.error('Failed to generate contract:', err);
+      // Don't fail the disbursement if contract generation fails
+    }
+
+    return { disbursement, contract };
   }
 }
 

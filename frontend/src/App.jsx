@@ -35,6 +35,8 @@ import KYCReviewDetail from './pages/admin/KYCReviewDetail';
 // Import Shared pages
 import Account from './components/Account';
 import Notifications from './components/Notifications';
+import ContractsPage from './pages/shared/ContractsPage';
+import ContractDetailPage from './pages/shared/ContractDetailPage';
 
 // Loading Spinner Component
 function LoadingSpinner() {
@@ -237,6 +239,22 @@ function AppRoutes() {
           </ProtectedRoute>
         }
       />
+      <Route
+        path="/contracts"
+        element={
+          <ProtectedRoute allowedRoles={['BUYER']}>
+            <ContractsPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/contracts/:contractId"
+        element={
+          <ProtectedRoute allowedRoles={['BUYER', 'SELLER', 'FINANCIER']}>
+            <ContractDetailPage />
+          </ProtectedRoute>
+        }
+      />
 
       {/* Seller Portal Routes */}
       <Route
@@ -276,6 +294,14 @@ function AppRoutes() {
         element={
           <ProtectedRoute allowedRoles={['SELLER']}>
             <CreateInvoice />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/seller/contracts"
+        element={
+          <ProtectedRoute allowedRoles={['SELLER']}>
+            <ContractsPage />
           </ProtectedRoute>
         }
       />
@@ -326,6 +352,14 @@ function AppRoutes() {
         element={
           <ProtectedRoute allowedRoles={['FINANCIER']}>
             <Portfolio />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/financier/contracts"
+        element={
+          <ProtectedRoute allowedRoles={['FINANCIER']}>
+            <ContractsPage />
           </ProtectedRoute>
         }
       />
