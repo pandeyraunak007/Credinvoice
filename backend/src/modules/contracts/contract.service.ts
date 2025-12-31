@@ -552,6 +552,52 @@ export class ContractService {
       },
     });
   }
+
+  /**
+   * Get contract by invoice ID
+   * Returns the contract associated with an invoice (if any)
+   */
+  async getContractByInvoiceId(
+    invoiceId: string,
+    userId: string,
+    userType: UserType
+  ) {
+    // First check if invoice exists and user has access
+    const invoice = await prisma.invoice.findUnique({
+      where: { id: invoiceId },
+      include: {
+        buyer: { select: { userId: true } },
+        seller: { select: { userId: true } },
+      },
+    });
+
+    if (!invoice) {
+      throw new AppError('Invoice not found', 404);
+    }
+
+    // Check access
+    if (userType !== 'ADMIN') {
+      const hasAccess =
+        invoice.buyer?.userId === userId ||
+        invoice.seller?.userId === userId;
+
+      if (!hasAccess) {
+        throw new AppError('You do not have access to this invoice', 403);
+      }
+    }
+
+    // Find contract for this invoice
+    const contract = await prisma.contract.findFirst({
+      where: { invoiceId },
+    });
+
+    if (!contract) {
+      return null; // No contract yet - this is valid
+    }
+
+    // Get full contract details
+    return this.getContractById(contract.id, userId, userType);
+  }
 }
 
 export const contractService = new ContractService();

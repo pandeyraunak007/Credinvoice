@@ -56,7 +56,7 @@ export default function ContractDetailPage() {
 
   const handleDownload = async () => {
     try {
-      await contractService.download(contractId);
+      await contractService.downloadPDF(contractId);
     } catch (err) {
       alert('Failed to download contract');
     }
