@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import {
   ArrowLeft, Search, Filter, Building2, Calendar, Clock, Star,
@@ -6,6 +6,7 @@ import {
   IndianRupee, Target, RefreshCw, SlidersHorizontal, X, Check, Loader2
 } from 'lucide-react';
 import { invoiceService, bidService } from '../../services/api';
+import { useNotification } from '../../context/NotificationContext';
 
 const RatingBadge = ({ rating }) => {
   const config = {
@@ -193,6 +194,7 @@ const InvoiceCard = ({ invoice, onPlaceBid, myBid }) => {
 
 export default function Marketplace() {
   const navigate = useNavigate();
+  const { notify } = useNotification();
   const [invoices, setInvoices] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -211,10 +213,47 @@ export default function Marketplace() {
   const [submittingBid, setSubmittingBid] = useState(false);
   const [myBids, setMyBids] = useState([]);
 
-  const fetchInvoices = async () => {
+  // Track previous invoice IDs to detect new ones
+  const previousInvoiceIdsRef = useRef(new Set());
+  const isInitialLoadRef = useRef(true);
+
+  // Check for new invoices and show notification
+  const checkForNewInvoices = useCallback((newInvoices) => {
+    if (isInitialLoadRef.current) {
+      // First load - just store IDs
+      previousInvoiceIdsRef.current = new Set(newInvoices.map(inv => inv.id));
+      isInitialLoadRef.current = false;
+      return;
+    }
+
+    // Find new invoices
+    const newInvoicesList = newInvoices.filter(inv => !previousInvoiceIdsRef.current.has(inv.id));
+
+    if (newInvoicesList.length > 0) {
+      const totalValue = newInvoicesList.reduce((sum, inv) => sum + (inv.amount || 0), 0);
+      notify.invoice(
+        'New Invoices Available!',
+        `${newInvoicesList.length} new invoice${newInvoicesList.length > 1 ? 's' : ''} worth ₹${(totalValue / 100000).toFixed(1)}L available for bidding`,
+        {
+          duration: 8000,
+          action: {
+            label: 'View Now →',
+            onClick: () => window.scrollTo({ top: 0, behavior: 'smooth' }),
+          },
+        }
+      );
+    }
+
+    // Update tracked IDs
+    previousInvoiceIdsRef.current = new Set(newInvoices.map(inv => inv.id));
+  }, [notify]);
+
+  const fetchInvoices = async (isPolling = false) => {
     try {
-      setLoading(true);
-      setError(null);
+      if (!isPolling) {
+        setLoading(true);
+        setError(null);
+      }
       const response = await invoiceService.getAvailable();
       // Transform API data to match component's expected format
       const transformedInvoices = (response.data || []).map(inv => ({
@@ -239,12 +278,20 @@ export default function Marketplace() {
         estYield: calculateYield(inv.discountPercentage || 2, inv.dueDate),
         sector: 'General',
       }));
+
+      // Check for new invoices and notify
+      checkForNewInvoices(transformedInvoices);
+
       setInvoices(transformedInvoices);
     } catch (err) {
       console.error('Failed to fetch invoices:', err);
-      setError(err.message || 'Failed to load invoices');
+      if (!isPolling) {
+        setError(err.message || 'Failed to load invoices');
+      }
     } finally {
-      setLoading(false);
+      if (!isPolling) {
+        setLoading(false);
+      }
     }
   };
 
@@ -260,6 +307,14 @@ export default function Marketplace() {
   useEffect(() => {
     fetchInvoices();
     fetchMyBids();
+
+    // Poll for new invoices every 30 seconds
+    const pollInterval = setInterval(() => {
+      fetchInvoices(true);
+      fetchMyBids();
+    }, 30000);
+
+    return () => clearInterval(pollInterval);
   }, []);
 
   const getExpiresIn = (createdAt) => {
@@ -576,7 +631,7 @@ export default function Marketplace() {
               {/* Bid Form */}
               <div className="space-y-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Your Discount Rate (%)</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Your Interest Rate (%)</label>
                   <div className="relative">
                     <input
                       type="number"

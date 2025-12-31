@@ -13,7 +13,7 @@ const statusConfig = {
   PENDING_ACCEPTANCE: { label: 'Pending Acceptance', color: 'bg-yellow-100 text-yellow-700', icon: Clock },
   ACCEPTED: { label: 'Accepted', color: 'bg-blue-100 text-blue-700', icon: CheckCircle },
   OPEN_FOR_BIDDING: { label: 'Open for Bidding', color: 'bg-purple-100 text-purple-700', icon: CreditCard },
-  BID_ACCEPTED: { label: 'Bid Selected', color: 'bg-indigo-100 text-indigo-700', icon: CheckCircle },
+  BID_SELECTED: { label: 'Bid Selected', color: 'bg-indigo-100 text-indigo-700', icon: CheckCircle },
   DISBURSED: { label: 'Disbursed', color: 'bg-green-100 text-green-700', icon: CheckCircle },
   SETTLED: { label: 'Settled', color: 'bg-emerald-100 text-emerald-700', icon: CheckCircle },
   REJECTED: { label: 'Rejected', color: 'bg-red-100 text-red-700', icon: XCircle },
@@ -541,7 +541,7 @@ export default function InvoicesPage() {
             {bidsCount > 0 && <span className="bg-white/20 px-1.5 rounded">{bidsCount}</span>}
           </button>
         );
-      case 'BID_ACCEPTED':
+      case 'BID_SELECTED':
         const acceptedBid = invoice.bids?.find(b => b.status === 'ACCEPTED');
         return (
           <div className="text-sm">

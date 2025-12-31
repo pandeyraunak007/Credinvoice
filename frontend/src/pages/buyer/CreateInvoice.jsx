@@ -319,6 +319,143 @@ const LineItemRow = ({ item, index, onChange, onRemove, canRemove }) => {
   );
 };
 
+// Discount Offer Confirmation Modal
+const DiscountOfferConfirmModal = ({ isOpen, onClose, onConfirm, data, isSubmitting }) => {
+  if (!isOpen) return null;
+
+  const {
+    invoiceNumber,
+    sellerName,
+    buyerName,
+    totalAmount,
+    discountPercentage,
+    discountedAmount,
+    earlyPaymentDate,
+    dueDate,
+  } = data;
+
+  const savingsAmount = totalAmount - discountedAmount;
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+      <div className="bg-white rounded-2xl max-w-lg w-full mx-4 overflow-hidden shadow-2xl">
+        <div className="px-6 py-4 border-b border-gray-200 bg-gradient-to-r from-blue-600 to-blue-700">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-3">
+              <div className="w-10 h-10 bg-white/20 rounded-full flex items-center justify-center">
+                <CheckCircle size={24} className="text-white" />
+              </div>
+              <h3 className="text-lg font-semibold text-white">Confirm Discount Offer</h3>
+            </div>
+            <button onClick={onClose} className="p-1 hover:bg-white/20 rounded-lg transition">
+              <X size={20} className="text-white" />
+            </button>
+          </div>
+        </div>
+
+        <div className="p-6 space-y-5">
+          <div className="text-center pb-4 border-b border-gray-100">
+            <p className="text-sm text-gray-500 mb-1">You are about to submit</p>
+            <p className="text-xl font-bold text-gray-800">Invoice {invoiceNumber}</p>
+            <p className="text-sm text-gray-600 mt-1">with a discount offer to <span className="font-medium">{sellerName}</span></p>
+          </div>
+
+          {/* Summary Details */}
+          <div className="space-y-3">
+            <div className="flex justify-between items-center py-2">
+              <span className="text-gray-600">Original Amount</span>
+              <span className="font-medium text-gray-800">₹{totalAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+            </div>
+            <div className="flex justify-between items-center py-2">
+              <span className="text-gray-600">Discount Offered</span>
+              <span className="font-medium text-green-600">-{discountPercentage}%</span>
+            </div>
+            <div className="flex justify-between items-center py-2 border-t border-gray-100 pt-3">
+              <span className="text-gray-800 font-medium">Discounted Amount</span>
+              <span className="font-bold text-lg text-blue-600">₹{discountedAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+            </div>
+          </div>
+
+          {/* Savings Highlight */}
+          <div className="bg-green-50 border border-green-200 rounded-xl p-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-2">
+                <Zap size={20} className="text-green-600" />
+                <span className="text-green-800 font-medium">Your Savings</span>
+              </div>
+              <span className="font-bold text-green-700 text-lg">₹{savingsAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+            </div>
+          </div>
+
+          {/* Payment Timeline */}
+          <div className="bg-gray-50 rounded-xl p-4">
+            <p className="text-sm font-medium text-gray-700 mb-3">Payment Timeline</p>
+            <div className="flex items-center justify-between text-sm">
+              <div className="text-center">
+                <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-1">
+                  <Calendar size={16} className="text-blue-600" />
+                </div>
+                <p className="text-xs text-gray-500">Early Payment</p>
+                <p className="font-medium text-gray-800">{new Date(earlyPaymentDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}</p>
+              </div>
+              <div className="flex-1 h-0.5 bg-gray-300 mx-3 relative">
+                <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-xs text-gray-400 bg-gray-50 px-2">
+                  vs
+                </div>
+              </div>
+              <div className="text-center">
+                <div className="w-8 h-8 bg-gray-200 rounded-full flex items-center justify-center mx-auto mb-1">
+                  <Calendar size={16} className="text-gray-500" />
+                </div>
+                <p className="text-xs text-gray-500">Original Due</p>
+                <p className="font-medium text-gray-600">{new Date(dueDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Info Note */}
+          <div className="flex items-start space-x-2 text-sm text-gray-600 bg-blue-50 p-3 rounded-lg">
+            <Info size={16} className="text-blue-500 flex-shrink-0 mt-0.5" />
+            <p>
+              The seller will receive a notification to accept or reject this offer. You can track the status in your invoices.
+            </p>
+          </div>
+        </div>
+
+        {/* Footer Actions */}
+        <div className="px-6 py-4 border-t border-gray-200 bg-gray-50 flex space-x-3">
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={isSubmitting}
+            className="flex-1 px-4 py-2.5 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-100 font-medium disabled:opacity-50"
+          >
+            Go Back
+          </button>
+          <button
+            type="button"
+            onClick={onConfirm}
+            disabled={isSubmitting}
+            className="flex-1 px-4 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium disabled:opacity-50 flex items-center justify-center space-x-2"
+          >
+            {isSubmitting ? (
+              <>
+                <Loader2 size={18} className="animate-spin" />
+                <span>Submitting...</span>
+              </>
+            ) : (
+              <>
+                <Check size={18} />
+                <span>Confirm & Submit</span>
+              </>
+            )}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 // Seller Referral Modal
 const SellerReferralModal = ({ isOpen, onClose, onSubmit }) => {
   const [formData, setFormData] = useState({
@@ -455,6 +592,7 @@ export default function CreateInvoice() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState(null);
   const [showReferralModal, setShowReferralModal] = useState(false);
+  const [showDiscountConfirmModal, setShowDiscountConfirmModal] = useState(false);
   const [errors, setErrors] = useState({});
 
   // Get buyer info from profile
@@ -616,6 +754,17 @@ export default function CreateInvoice() {
   const handleSubmit = async (asDraft = false) => {
     if (!asDraft && !validateForm()) return;
 
+    // If discount is enabled and not a draft, show confirmation modal first
+    if (!asDraft && enableDiscount) {
+      setShowDiscountConfirmModal(true);
+      return;
+    }
+
+    // For drafts or non-discount submissions, proceed directly
+    await executeSubmit(asDraft);
+  };
+
+  const executeSubmit = async (asDraft = false) => {
     setIsSubmitting(true);
     setSubmitError(null);
 
@@ -657,6 +806,7 @@ export default function CreateInvoice() {
         }
       }
 
+      setShowDiscountConfirmModal(false);
       navigate('/invoices');
     } catch (error) {
       console.error('Failed to create invoice:', error);
@@ -664,6 +814,10 @@ export default function CreateInvoice() {
     } finally {
       setIsSubmitting(false);
     }
+  };
+
+  const handleConfirmDiscountOffer = async () => {
+    await executeSubmit(false);
   };
 
   return (
@@ -1117,6 +1271,24 @@ export default function CreateInvoice() {
         isOpen={showReferralModal}
         onClose={() => setShowReferralModal(false)}
         onSubmit={(data) => console.log('Referral sent:', data)}
+      />
+
+      {/* Discount Offer Confirmation Modal */}
+      <DiscountOfferConfirmModal
+        isOpen={showDiscountConfirmModal}
+        onClose={() => setShowDiscountConfirmModal(false)}
+        onConfirm={handleConfirmDiscountOffer}
+        isSubmitting={isSubmitting}
+        data={{
+          invoiceNumber: invoiceData.invoiceNumber,
+          sellerName: selectedSeller?.companyName || '',
+          buyerName: buyerInfo.companyName || '',
+          totalAmount: parseFloat(amounts.totalAmount) || 0,
+          discountPercentage: parseFloat(discountOffer.discountPercentage) || 0,
+          discountedAmount: discountedAmount,
+          earlyPaymentDate: discountOffer.earlyPaymentDate,
+          dueDate: invoiceData.dueDate,
+        }}
       />
     </div>
   );

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import {
   TrendingUp, FileText, Clock, CheckCircle, XCircle,
@@ -8,12 +8,14 @@ import {
 } from 'lucide-react';
 import { discountService, invoiceService, disbursementService } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
+import { useNotification } from '../../context/NotificationContext';
 import NotificationDropdown from '../../components/NotificationDropdown';
 
 // ============ SELLER DASHBOARD ============
 export function SellerDashboard() {
   const navigate = useNavigate();
   const { user, profile } = useAuth();
+  const { notify } = useNotification();
   const [loading, setLoading] = useState(true);
   const [pendingOffers, setPendingOffers] = useState([]);
   const [recentPayments, setRecentPayments] = useState([]);
@@ -26,13 +28,49 @@ export function SellerDashboard() {
     upcomingRepayments: 0
   });
 
+  // Track previous offer IDs to detect new offers
+  const previousOfferIdsRef = useRef(new Set());
+  const isInitialLoadRef = useRef(true);
+
   const sellerInfo = profile?.seller || {};
   const companyInitials = sellerInfo.companyName ? sellerInfo.companyName.substring(0, 2).toUpperCase() : 'SE';
   const contactName = sellerInfo.contactName || user?.email?.split('@')[0] || 'User';
 
-  const fetchData = async () => {
+  // Check for new offers and show notification
+  const checkForNewOffers = useCallback((offers) => {
+    if (isInitialLoadRef.current) {
+      // First load - just store the IDs, don't notify
+      previousOfferIdsRef.current = new Set(offers.map(o => o.id));
+      isInitialLoadRef.current = false;
+      return;
+    }
+
+    // Find new offers
+    const newOffers = offers.filter(offer => !previousOfferIdsRef.current.has(offer.id));
+
+    if (newOffers.length > 0) {
+      newOffers.forEach(offer => {
+        notify.discount(
+          'New Discount Offer!',
+          `${offer.buyer || 'A buyer'} sent a ${offer.discount || offer.discountPercentage}% discount offer for ₹${((offer.amount || 0) / 1000).toFixed(0)}K`,
+          {
+            duration: 8000,
+            action: {
+              label: 'Review Offer →',
+              onClick: () => navigate(`/seller/offers/${offer.id}`),
+            },
+          }
+        );
+      });
+    }
+
+    // Update the tracked IDs
+    previousOfferIdsRef.current = new Set(offers.map(o => o.id));
+  }, [notify, navigate]);
+
+  const fetchData = async (isPolling = false) => {
     try {
-      setLoading(true);
+      if (!isPolling) setLoading(true);
       // Fetch pending discount offers for seller
       const offersResponse = await discountService.getPending();
       const offers = offersResponse.data || [];
@@ -44,10 +82,14 @@ export function SellerDashboard() {
         invoiceNumber: offer.invoice?.invoiceNumber || offer.invoiceId,
         amount: offer.invoice?.totalAmount || 0,
         discount: offer.discountPercentage || 0,
+        discountPercentage: offer.discountPercentage || 0,
         earlyDate: offer.earlyPaymentDate,
         expiresIn: getExpiresIn(offer.expiresAt),
         urgent: isUrgent(offer.expiresAt),
       }));
+
+      // Check for new offers and notify
+      checkForNewOffers(transformedOffers);
 
       setPendingOffers(transformedOffers);
 
@@ -88,6 +130,13 @@ export function SellerDashboard() {
 
   useEffect(() => {
     fetchData();
+
+    // Poll for new offers every 30 seconds
+    const pollInterval = setInterval(() => {
+      fetchData(true); // isPolling = true to avoid showing loading state
+    }, 30000);
+
+    return () => clearInterval(pollInterval);
   }, []);
 
   const getExpiresIn = (expiresAt) => {

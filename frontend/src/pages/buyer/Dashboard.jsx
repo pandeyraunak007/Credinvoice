@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import {
   Plus, FileText, TrendingUp, Clock, CreditCard, Users, AlertCircle,
@@ -6,11 +6,13 @@ import {
 } from 'lucide-react';
 import { invoiceService, discountService, disbursementService } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
+import { useNotification } from '../../context/NotificationContext';
 import NotificationDropdown from '../../components/NotificationDropdown';
 
 export default function BuyerDashboard() {
   const navigate = useNavigate();
   const { user, profile } = useAuth();
+  const { notify } = useNotification();
   const [selectedPeriod, setSelectedPeriod] = useState('thisMonth');
   const [loading, setLoading] = useState(true);
 
@@ -27,16 +29,74 @@ export default function BuyerDashboard() {
     upcomingRepayments: 0
   });
 
+  // Track previous offer states to detect newly accepted offers
+  const previousOfferStatesRef = useRef(new Map());
+  const isInitialLoadRef = useRef(true);
+
   const buyerInfo = profile?.buyer || {};
   const companyInitials = buyerInfo.companyName ? buyerInfo.companyName.substring(0, 2).toUpperCase() : 'BU';
 
+  // Check for newly accepted offers and show notification
+  const checkForAcceptedOffers = useCallback((offers) => {
+    if (isInitialLoadRef.current) {
+      // First load - just store states, don't notify
+      offers.forEach(offer => {
+        previousOfferStatesRef.current.set(offer.id, offer.status);
+      });
+      isInitialLoadRef.current = false;
+      return;
+    }
+
+    // Check for newly accepted offers
+    offers.forEach(offer => {
+      const previousStatus = previousOfferStatesRef.current.get(offer.id);
+      if (previousStatus === 'PENDING' && offer.status === 'ACCEPTED') {
+        notify.success(
+          'Offer Accepted!',
+          `${offer.invoice?.sellerName || 'Seller'} accepted your discount offer for Invoice ${offer.invoice?.invoiceNumber || 'N/A'}`,
+          {
+            duration: 8000,
+            action: {
+              label: 'Choose Funding →',
+              onClick: () => navigate(`/invoices/${offer.invoice?.id || offer.invoiceId}`),
+            },
+          }
+        );
+      } else if (previousStatus === 'PENDING' && offer.status === 'REJECTED') {
+        notify.error(
+          'Offer Rejected',
+          `${offer.invoice?.sellerName || 'Seller'} rejected your discount offer for Invoice ${offer.invoice?.invoiceNumber || 'N/A'}`,
+          {
+            duration: 8000,
+            action: {
+              label: 'View Details →',
+              onClick: () => navigate(`/invoices/${offer.invoice?.id || offer.invoiceId}`),
+            },
+          }
+        );
+      }
+    });
+
+    // Update tracked states
+    offers.forEach(offer => {
+      previousOfferStatesRef.current.set(offer.id, offer.status);
+    });
+  }, [notify, navigate]);
+
   useEffect(() => {
     fetchDashboardData();
+
+    // Poll for updates every 30 seconds
+    const pollInterval = setInterval(() => {
+      fetchDashboardData(true);
+    }, 30000);
+
+    return () => clearInterval(pollInterval);
   }, []);
 
-  const fetchDashboardData = async () => {
+  const fetchDashboardData = async (isPolling = false) => {
     try {
-      setLoading(true);
+      if (!isPolling) setLoading(true);
 
       // Fetch all data in parallel
       const [invoicesRes, offersRes, disbursementsRes, repaymentsRes] = await Promise.all([
@@ -50,6 +110,9 @@ export default function BuyerDashboard() {
       const offersData = offersRes.data || [];
       const disbursementData = disbursementsRes.data || [];
       const repaymentData = repaymentsRes.data?.repayments || repaymentsRes.data || [];
+
+      // Check for newly accepted/rejected offers and notify
+      checkForAcceptedOffers(offersData);
 
       setInvoices(invoiceData);
       setDiscountOffers(offersData);

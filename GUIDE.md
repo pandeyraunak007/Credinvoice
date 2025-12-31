@@ -311,5 +311,72 @@ npm run preview      # Preview production build
 ### Key Fixes:
 - **KYC Status Bug:** The profile API returns nested structure (`profile.buyer.kycStatus`), but AuthContext was checking `profile.kycStatus`. Fixed by adding helper function to extract KYC status based on user type.
 
+---
+
+## Session Summary (Dec 31, 2025)
+
+### New Features Implemented:
+
+#### 1. Discount Offer Confirmation Dialog
+- Added a 2nd confirmation dialog when buyer submits a discount offer
+- Shows detailed summary: invoice number, seller name, original amount, discount %, discounted amount, savings
+- Displays payment timeline comparing early payment date vs original due date
+- Implemented in `frontend/src/pages/buyer/CreateInvoice.jsx`
+
+#### 2. Real-Time Notification System
+- Created new `NotificationContext` with toast-style notifications
+- Notifications appear in top-right corner with auto-dismiss (5 seconds default)
+- Support for multiple notification types: success, error, info, discount, payment, invoice
+- Optional sound alerts for notifications
+- Implemented in `frontend/src/context/NotificationContext.jsx`
+
+#### 3. Seller Notification on New Discount Offers
+- Added polling every 30 seconds on seller dashboard
+- Shows popup notification when new discount offer is received
+- Includes direct link to review the offer
+- Updated `frontend/src/pages/seller/SellerPortal.jsx`
+
+#### 4. Buyer Notification on Offer Acceptance/Rejection
+- Added polling on buyer dashboard to detect status changes
+- Shows success notification when seller accepts offer
+- Shows error notification when seller rejects offer
+- Includes action button to navigate to funding selection
+- Updated `frontend/src/pages/buyer/Dashboard.jsx`
+
+#### 5. Financier Notification on New Invoices
+- Added polling on financier marketplace
+- Shows notification when new invoices become available for bidding
+- Updated `frontend/src/pages/financier/Marketplace.jsx`
+
+#### 6. Interest Rate Label Change
+- Changed "Your Discount Rate (%)" to "Your Interest Rate (%)" in financier bid placement modal
+- Updated in `frontend/src/pages/financier/Marketplace.jsx`
+
+### Bug Fixes:
+
+#### 1. Invoice Status Mapping Fix
+- Fixed `BID_ACCEPTED` → `BID_SELECTED` status mapping
+- The backend uses `BID_SELECTED` but frontend was mapping `BID_ACCEPTED`
+- This caused invoices to show as "Draft" after bid selection
+- Fixed in:
+  - `frontend/src/pages/buyer/InvoiceDetail.jsx`
+  - `frontend/src/pages/buyer/Invoices.jsx`
+
+#### 2. Status Timeline Update
+- Added `BID_SELECTED` status to invoice timeline
+- Shows "Financier bid accepted, awaiting disbursement" description
+
+### Files Modified:
+| File | Changes |
+|------|---------|
+| `frontend/src/App.jsx` | Added NotificationProvider wrapper |
+| `frontend/src/context/NotificationContext.jsx` | **NEW** - Notification system |
+| `frontend/src/pages/buyer/CreateInvoice.jsx` | Added DiscountOfferConfirmModal |
+| `frontend/src/pages/buyer/Dashboard.jsx` | Added notification polling |
+| `frontend/src/pages/buyer/InvoiceDetail.jsx` | Fixed status mapping |
+| `frontend/src/pages/buyer/Invoices.jsx` | Fixed status mapping |
+| `frontend/src/pages/seller/SellerPortal.jsx` | Added notification polling |
+| `frontend/src/pages/financier/Marketplace.jsx` | Added notifications & label change |
+
 ### GitHub Repository:
 https://github.com/pandeyraunak007/Credinvoice
