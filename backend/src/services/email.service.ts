@@ -17,17 +17,21 @@ export const emailTemplates = {
     discountedAmount: number;
     discountPercentage: number;
     expiresAt: Date;
+    isRevision?: boolean;
+    revisionNumber?: number;
   }) => ({
-    subject: `New Discount Offer from ${data.buyerName} - ${data.invoiceNumber}`,
+    subject: data.isRevision
+      ? `Revised Discount Offer (Revision ${data.revisionNumber}) from ${data.buyerName} - ${data.invoiceNumber}`
+      : `New Discount Offer from ${data.buyerName} - ${data.invoiceNumber}`,
     html: `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
         <div style="background: #DC2626; padding: 20px; text-align: center;">
           <h1 style="color: white; margin: 0;">CRED<span style="font-weight: normal;">INVOICE</span></h1>
         </div>
         <div style="padding: 30px; background: #f9fafb;">
-          <h2 style="color: #1f2937;">New Discount Offer Received</h2>
+          <h2 style="color: #1f2937;">${data.isRevision ? 'Revised Discount Offer Received' : 'New Discount Offer Received'}</h2>
           <p style="color: #4b5563;">Hi ${data.sellerName},</p>
-          <p style="color: #4b5563;">You have received a new discount offer from <strong>${data.buyerName}</strong>.</p>
+          <p style="color: #4b5563;">You have received a ${data.isRevision ? `revised discount offer (Revision ${data.revisionNumber})` : 'new discount offer'} from <strong>${data.buyerName}</strong>.</p>
 
           <div style="background: white; border-radius: 12px; padding: 20px; margin: 20px 0; border: 1px solid #e5e7eb;">
             <h3 style="margin-top: 0; color: #374151;">Offer Details</h3>
@@ -130,6 +134,8 @@ export const emailTemplates = {
     sellerName: string;
     invoiceNumber: string;
     reason?: string;
+    canRevise?: boolean;
+    revisionsRemaining?: number;
   }) => ({
     subject: `Discount Offer Declined - ${data.invoiceNumber}`,
     html: `
@@ -148,12 +154,21 @@ export const emailTemplates = {
           </div>
           ` : ''}
 
+          ${data.canRevise ? `
+          <div style="background: #fef3c7; border-radius: 8px; padding: 15px; margin: 20px 0;">
+            <p style="margin: 0; color: #92400e;">
+              <strong>You can revise this offer!</strong> You have ${data.revisionsRemaining} revision${data.revisionsRemaining !== 1 ? 's' : ''} remaining.
+              Consider adjusting your discount terms and resubmitting.
+            </p>
+          </div>
+          ` : `
           <p style="color: #4b5563;">You can submit a new offer with different terms or proceed with standard payment terms.</p>
+          `}
 
           <div style="text-align: center; margin: 30px 0;">
             <a href="${process.env.FRONTEND_URL || 'http://localhost:5173'}/invoices"
                style="background: #2563eb; color: white; padding: 14px 28px; text-decoration: none; border-radius: 8px; font-weight: bold; display: inline-block;">
-              View Invoice
+              ${data.canRevise ? 'Revise Offer' : 'View Invoice'}
             </a>
           </div>
         </div>
@@ -164,7 +179,7 @@ export const emailTemplates = {
         </div>
       </div>
     `,
-    text: `Discount Offer Declined\n\n${data.sellerName} has declined your discount offer for invoice ${data.invoiceNumber}.${data.reason ? `\n\nReason: ${data.reason}` : ''}\n\nLogin to CredInvoice to submit a new offer or proceed with standard payment.`
+    text: `Discount Offer Declined\n\n${data.sellerName} has declined your discount offer for invoice ${data.invoiceNumber}.${data.reason ? `\n\nReason: ${data.reason}` : ''}${data.canRevise ? `\n\nYou have ${data.revisionsRemaining} revision(s) remaining. Login to CredInvoice to revise your offer.` : '\n\nLogin to CredInvoice to submit a new offer or proceed with standard payment.'}`
   }),
 
   bidReceived: (data: {
