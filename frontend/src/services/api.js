@@ -335,6 +335,19 @@ export const discountService = {
       method: 'POST',
       body: JSON.stringify({ bankAccountId }),
     }),
+
+  // Buyer revises a rejected offer (max 2 revisions)
+  reviseOffer: (id, data) =>
+    apiRequest(`/discounts/${id}/revise`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  // Cancel a discount offer
+  cancel: (id) =>
+    apiRequest(`/discounts/${id}/cancel`, {
+      method: 'POST',
+    }),
 };
 
 // Disbursement Service

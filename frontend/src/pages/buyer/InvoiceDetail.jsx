@@ -4,7 +4,8 @@ import {
   ArrowLeft, FileText, Download, Clock, CheckCircle, Building2, Calendar,
   IndianRupee, Percent, CreditCard, ChevronRight, Eye, MessageSquare,
   History, User, Phone, Mail, MapPin, TrendingUp, Printer, Share2,
-  Wallet, Users, AlertCircle, Loader2, X, Shield, BanknoteIcon, Building
+  Wallet, Users, AlertCircle, Loader2, X, Shield, BanknoteIcon, Building,
+  RefreshCw, XCircle, Edit3, Send
 } from 'lucide-react';
 import { invoiceService, discountService, profileService } from '../../services/api';
 
@@ -18,6 +19,7 @@ const StatusBadge = ({ status }) => {
     DISBURSED: { label: 'Disbursed', color: 'bg-green-100 text-green-700', icon: CheckCircle },
     SETTLED: { label: 'Settled', color: 'bg-emerald-100 text-emerald-700', icon: CheckCircle },
     REJECTED: { label: 'Rejected', color: 'bg-red-100 text-red-700', icon: X },
+    EXPIRED: { label: 'Expired', color: 'bg-gray-100 text-gray-600', icon: Clock },
   };
   const { label, color, icon: Icon } = config[status] || config.DRAFT;
   return (
@@ -65,10 +67,28 @@ const StatusTimeline = ({ invoice }) => {
           });
         }
       } else if (invoice.discountOffer.status === 'REJECTED') {
+        const revisionCount = invoice.discountOffer.revisionCount || 0;
+        const canRevise = revisionCount < 2;
         events.push({
           title: 'Seller Rejected',
+          date: invoice.discountOffer.respondedAt ? new Date(invoice.discountOffer.respondedAt).toLocaleDateString('en-IN', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '',
           status: 'completed',
-          description: 'Offer was declined'
+          description: canRevise
+            ? `Revision ${revisionCount + 1}/3 available`
+            : 'Max revisions reached'
+        });
+        if (canRevise) {
+          events.push({
+            title: 'Awaiting Revision',
+            status: 'current',
+            description: 'Revise and resend offer'
+          });
+        }
+      } else if (invoice.discountOffer.status === 'EXPIRED') {
+        events.push({
+          title: 'Offer Expired',
+          status: 'completed',
+          description: 'Acceptance period ended'
         });
       } else {
         events.push({
@@ -467,6 +487,185 @@ const FundingTypeModal = ({ isOpen, onClose, invoice, onSelectFundingType, isLoa
   );
 };
 
+// Revise Offer Modal
+const ReviseOfferModal = ({ isOpen, onClose, invoice, onRevise, isLoading }) => {
+  const [discountPercentage, setDiscountPercentage] = useState('');
+  const [earlyPaymentDate, setEarlyPaymentDate] = useState('');
+  const [expiresIn, setExpiresIn] = useState('48'); // Hours until expiry
+
+  useEffect(() => {
+    if (isOpen && invoice?.discountOffer) {
+      setDiscountPercentage(invoice.discountOffer.discountPercentage?.toString() || '');
+      if (invoice.discountOffer.earlyPaymentDate) {
+        const date = new Date(invoice.discountOffer.earlyPaymentDate);
+        setEarlyPaymentDate(date.toISOString().split('T')[0]);
+      }
+    }
+  }, [isOpen, invoice]);
+
+  if (!isOpen || !invoice) return null;
+
+  const discountOffer = invoice.discountOffer;
+  const revisionsUsed = discountOffer?.revisionCount || 0;
+  const revisionsRemaining = 2 - revisionsUsed;
+
+  const handleSubmit = () => {
+    const expiresAt = new Date();
+    expiresAt.setHours(expiresAt.getHours() + parseInt(expiresIn));
+
+    onRevise({
+      discountPercentage: parseFloat(discountPercentage),
+      earlyPaymentDate: new Date(earlyPaymentDate).toISOString(),
+      expiresAt: expiresAt.toISOString(),
+    });
+  };
+
+  const minDate = new Date();
+  minDate.setDate(minDate.getDate() + 1);
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+      <div className="bg-white rounded-2xl max-w-lg w-full mx-4 overflow-hidden shadow-2xl">
+        <div className="px-6 py-4 border-b border-gray-200 bg-gradient-to-r from-orange-50 to-yellow-50">
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="text-lg font-semibold text-gray-800">Revise Discount Offer</h3>
+              <p className="text-sm text-gray-500">Invoice: {invoice.invoiceNumber}</p>
+            </div>
+            <button onClick={onClose} className="p-1 hover:bg-gray-100 rounded-lg">
+              <X size={20} className="text-gray-500" />
+            </button>
+          </div>
+        </div>
+
+        <div className="p-6">
+          {/* Rejection Reason */}
+          {discountOffer?.rejectionReason && (
+            <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-xl">
+              <div className="flex items-start space-x-3">
+                <XCircle size={20} className="text-red-500 flex-shrink-0 mt-0.5" />
+                <div>
+                  <p className="font-medium text-red-800">Seller's Feedback</p>
+                  <p className="text-sm text-red-700 mt-1">{discountOffer.rejectionReason}</p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Revision Count Warning */}
+          <div className={`mb-6 p-3 rounded-lg flex items-center space-x-2 ${
+            revisionsRemaining === 1 ? 'bg-orange-50 text-orange-700' : 'bg-blue-50 text-blue-700'
+          }`}>
+            <RefreshCw size={16} />
+            <span className="text-sm font-medium">
+              {revisionsRemaining} revision{revisionsRemaining !== 1 ? 's' : ''} remaining
+            </span>
+          </div>
+
+          {/* Form */}
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                New Discount Percentage
+              </label>
+              <div className="relative">
+                <input
+                  type="number"
+                  step="0.1"
+                  min="0.1"
+                  max="50"
+                  value={discountPercentage}
+                  onChange={(e) => setDiscountPercentage(e.target.value)}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  placeholder="Enter discount percentage"
+                />
+                <span className="absolute right-4 top-1/2 transform -translate-y-1/2 text-gray-500">%</span>
+              </div>
+              <p className="text-xs text-gray-500 mt-1">Previous: {discountOffer?.discountPercentage}%</p>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Early Payment Date
+              </label>
+              <input
+                type="date"
+                value={earlyPaymentDate}
+                onChange={(e) => setEarlyPaymentDate(e.target.value)}
+                min={minDate.toISOString().split('T')[0]}
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Offer Valid For
+              </label>
+              <select
+                value={expiresIn}
+                onChange={(e) => setExpiresIn(e.target.value)}
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              >
+                <option value="24">24 hours</option>
+                <option value="48">48 hours</option>
+                <option value="72">72 hours</option>
+                <option value="168">1 week</option>
+              </select>
+            </div>
+          </div>
+
+          {/* Summary */}
+          {discountPercentage && (
+            <div className="mt-6 p-4 bg-green-50 rounded-xl">
+              <p className="text-sm text-gray-600 mb-2">Revised Offer Summary</p>
+              <div className="flex justify-between items-center">
+                <span className="text-gray-800">Discount Amount</span>
+                <span className="text-lg font-bold text-green-600">
+                  ₹{((invoice.totalAmount * parseFloat(discountPercentage || 0)) / 100).toLocaleString('en-IN')}
+                </span>
+              </div>
+              <div className="flex justify-between items-center mt-1">
+                <span className="text-gray-800">Net Payment</span>
+                <span className="text-lg font-bold text-gray-800">
+                  ₹{(invoice.totalAmount - (invoice.totalAmount * parseFloat(discountPercentage || 0)) / 100).toLocaleString('en-IN')}
+                </span>
+              </div>
+            </div>
+          )}
+
+          {/* Actions */}
+          <div className="flex items-center space-x-3 mt-6">
+            <button
+              onClick={onClose}
+              disabled={isLoading}
+              className="flex-1 px-4 py-2.5 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 font-medium disabled:opacity-50"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleSubmit}
+              disabled={isLoading || !discountPercentage || !earlyPaymentDate}
+              className="flex-1 px-6 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium disabled:opacity-50 flex items-center justify-center space-x-2"
+            >
+              {isLoading ? (
+                <>
+                  <Loader2 size={18} className="animate-spin" />
+                  <span>Sending...</span>
+                </>
+              ) : (
+                <>
+                  <Send size={18} />
+                  <span>Send Revised Offer</span>
+                </>
+              )}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 export default function InvoiceDetail() {
   const navigate = useNavigate();
   const { id } = useParams();
@@ -478,6 +677,7 @@ export default function InvoiceDetail() {
   // Modal states
   const [fundingModal, setFundingModal] = useState(false);
   const [paymentModal, setPaymentModal] = useState(false);
+  const [reviseModal, setReviseModal] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
 
   useEffect(() => {
@@ -535,6 +735,23 @@ export default function InvoiceDetail() {
     }
   };
 
+  const handleReviseOffer = async (data) => {
+    if (!invoice?.discountOffer?.id) return;
+
+    setActionLoading(true);
+    try {
+      await discountService.reviseOffer(invoice.discountOffer.id, data);
+      setReviseModal(false);
+      await fetchInvoice();
+      alert('Revised offer sent to seller for review!');
+    } catch (err) {
+      console.error('Failed to revise offer:', err);
+      alert(err.message || 'Failed to revise offer');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
   const formatCurrency = (amount) => {
     if (!amount) return '₹0';
     return `₹${amount.toLocaleString('en-IN')}`;
@@ -582,6 +799,13 @@ export default function InvoiceDetail() {
   const showFundingSelection = invoice.status === 'ACCEPTED' && discountOffer?.status === 'ACCEPTED' && !discountOffer?.fundingType;
   const showPaymentAuthorization = invoice.status === 'ACCEPTED' && discountOffer?.fundingType === 'SELF_FUNDED' && !invoice.disbursement;
   const showViewBids = invoice.status === 'OPEN_FOR_BIDDING';
+
+  // Rejection and revision handling
+  const isOfferRejected = discountOffer?.status === 'REJECTED';
+  const isOfferExpired = discountOffer?.status === 'EXPIRED' ||
+    (discountOffer?.expiresAt && new Date(discountOffer.expiresAt) < new Date());
+  const canRevise = isOfferRejected && !isOfferExpired && (discountOffer?.revisionCount || 0) < 2;
+  const revisionsRemaining = 2 - (discountOffer?.revisionCount || 0);
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -637,6 +861,16 @@ export default function InvoiceDetail() {
                   {invoice._count?.bids > 0 && (
                     <span className="bg-white/20 px-2 py-0.5 rounded text-sm">{invoice._count.bids}</span>
                   )}
+                </button>
+              )}
+
+              {canRevise && (
+                <button
+                  onClick={() => setReviseModal(true)}
+                  className="bg-orange-600 text-white px-4 py-2 rounded-lg hover:bg-orange-700 flex items-center space-x-2"
+                >
+                  <Edit3 size={18} />
+                  <span>Revise Offer</span>
                 </button>
               )}
             </div>
@@ -728,6 +962,73 @@ export default function InvoiceDetail() {
                   </div>
                 )}
 
+                {/* Rejection Alert */}
+                {isOfferRejected && (
+                  <div className={`rounded-xl p-4 ${isOfferExpired ? 'bg-gray-50 border border-gray-200' : 'bg-red-50 border border-red-200'}`}>
+                    <div className="flex items-start space-x-3">
+                      <div className={`w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 ${
+                        isOfferExpired ? 'bg-gray-100' : 'bg-red-100'
+                      }`}>
+                        {isOfferExpired ? (
+                          <Clock size={20} className="text-gray-500" />
+                        ) : (
+                          <XCircle size={20} className="text-red-600" />
+                        )}
+                      </div>
+                      <div className="flex-1">
+                        <p className={`font-medium ${isOfferExpired ? 'text-gray-800' : 'text-red-800'}`}>
+                          {isOfferExpired ? 'Offer Expired' : 'Discount Offer Rejected'}
+                        </p>
+                        {discountOffer?.rejectionReason && !isOfferExpired && (
+                          <p className="text-sm text-red-700 mt-1">
+                            <span className="font-medium">Seller's Reason:</span> {discountOffer.rejectionReason}
+                          </p>
+                        )}
+                        {isOfferExpired ? (
+                          <p className="text-sm text-gray-600 mt-1">
+                            This offer has expired and can no longer be revised.
+                          </p>
+                        ) : canRevise ? (
+                          <p className="text-sm text-red-600 mt-1">
+                            You have {revisionsRemaining} revision{revisionsRemaining !== 1 ? 's' : ''} remaining.
+                            Consider adjusting your offer terms.
+                          </p>
+                        ) : (
+                          <p className="text-sm text-gray-600 mt-1">
+                            Maximum revisions reached. You may create a new discount offer.
+                          </p>
+                        )}
+                      </div>
+                      {canRevise && (
+                        <button
+                          onClick={() => setReviseModal(true)}
+                          className="bg-orange-600 text-white px-4 py-2 rounded-lg hover:bg-orange-700 flex items-center space-x-2 flex-shrink-0"
+                        >
+                          <Edit3 size={16} />
+                          <span>Revise Offer</span>
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Expired Offer Alert (when status is EXPIRED) */}
+                {discountOffer?.status === 'EXPIRED' && !isOfferRejected && (
+                  <div className="bg-gray-50 border border-gray-200 rounded-xl p-4">
+                    <div className="flex items-center space-x-3">
+                      <div className="w-10 h-10 bg-gray-100 rounded-full flex items-center justify-center">
+                        <Clock size={20} className="text-gray-500" />
+                      </div>
+                      <div>
+                        <p className="font-medium text-gray-800">Offer Expired</p>
+                        <p className="text-sm text-gray-600">
+                          This discount offer has expired. You can create a new offer if needed.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
                 {/* Invoice Summary */}
                 <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
                   <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
@@ -815,13 +1116,43 @@ export default function InvoiceDetail() {
                         </div>
                         <div className="p-3 bg-gray-50 rounded-lg">
                           <p className="text-sm text-gray-500">Offer Status</p>
-                          <p className="font-medium">{discountOffer.status}</p>
+                          <p className={`font-medium ${
+                            discountOffer.status === 'REJECTED' ? 'text-red-600' :
+                            discountOffer.status === 'EXPIRED' ? 'text-gray-500' :
+                            discountOffer.status === 'ACCEPTED' ? 'text-green-600' : ''
+                          }`}>{discountOffer.status}</p>
                         </div>
                         <div className="p-3 bg-gray-50 rounded-lg">
                           <p className="text-sm text-gray-500">Funding Type</p>
                           <p className="font-medium">{discountOffer.fundingType || 'Not Selected'}</p>
                         </div>
                       </div>
+                      {discountOffer.expiresAt && (
+                        <div className="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+                          <div className="flex items-center space-x-2">
+                            <Clock size={16} className="text-yellow-600" />
+                            <span className="text-sm text-yellow-800">
+                              {new Date(discountOffer.expiresAt) > new Date() ? (
+                                <>Offer expires on {formatDate(discountOffer.expiresAt)}</>
+                              ) : (
+                                <span className="text-gray-600">Offer expired on {formatDate(discountOffer.expiresAt)}</span>
+                              )}
+                            </span>
+                          </div>
+                        </div>
+                      )}
+                      {discountOffer.rejectionReason && (
+                        <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded-lg">
+                          <p className="text-sm text-red-800">
+                            <span className="font-medium">Rejection Reason:</span> {discountOffer.rejectionReason}
+                          </p>
+                          {(discountOffer.revisionCount || 0) > 0 && (
+                            <p className="text-xs text-red-600 mt-1">
+                              Revisions used: {discountOffer.revisionCount}/2
+                            </p>
+                          )}
+                        </div>
+                      )}
                     </div>
                   </div>
                 )}
@@ -1072,6 +1403,14 @@ export default function InvoiceDetail() {
         onClose={() => setPaymentModal(false)}
         invoice={invoice}
         onAuthorize={handleAuthorizePayment}
+        isLoading={actionLoading}
+      />
+
+      <ReviseOfferModal
+        isOpen={reviseModal}
+        onClose={() => setReviseModal(false)}
+        invoice={invoice}
+        onRevise={handleReviseOffer}
         isLoading={actionLoading}
       />
     </div>

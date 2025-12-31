@@ -277,16 +277,25 @@ export class DiscountService {
       throw new AppError('This offer has already been responded to', 400);
     }
 
+    // Check if offer has expired
+    if (offer.expiresAt && new Date() > offer.expiresAt) {
+      throw new AppError('This offer has expired', 400);
+    }
+
     const newStatus = input.action === 'ACCEPT' ? 'ACCEPTED' : 'REJECTED';
     // When seller accepts, invoice goes to ACCEPTED status
-    // Buyer will then select funding type which will determine next step
-    const newInvoiceStatus = input.action === 'ACCEPT' ? 'ACCEPTED' : 'REJECTED';
+    // When rejected, invoice stays at PENDING_ACCEPTANCE so buyer can revise (if revisions remaining)
+    const canRevise = offer.revisionCount < 2;
+    const newInvoiceStatus = input.action === 'ACCEPT'
+      ? 'ACCEPTED'
+      : (canRevise ? 'PENDING_ACCEPTANCE' : 'REJECTED');
 
     const updated = await prisma.$transaction(async (tx) => {
       const updatedOffer = await tx.discountOffer.update({
         where: { id: offerId },
         data: {
           status: newStatus as DiscountOfferStatus,
+          rejectionReason: input.action === 'REJECT' ? input.rejectionReason : null,
           respondedAt: new Date(),
         },
       });
@@ -319,11 +328,133 @@ export class DiscountService {
           sellerName: seller.companyName || 'Seller',
           invoiceNumber: offer.invoice.invoiceNumber,
           reason: input.rejectionReason,
+          canRevise,
+          revisionsRemaining: 2 - offer.revisionCount,
         }).catch(err => console.error('Failed to send offer rejected email:', err));
       }
     }
 
+    return { ...updated, canRevise, revisionsRemaining: 2 - offer.revisionCount };
+  }
+
+  // Buyer revises a rejected discount offer
+  async reviseOffer(
+    offerId: string,
+    buyerUserId: string,
+    data: { discountPercentage: number; earlyPaymentDate: string; expiresAt?: string }
+  ) {
+    const buyer = await prisma.buyer.findUnique({ where: { userId: buyerUserId } });
+    if (!buyer) throw new AppError('Buyer profile not found', 404);
+
+    const offer = await prisma.discountOffer.findUnique({
+      where: { id: offerId },
+      include: { invoice: true },
+    });
+
+    if (!offer) {
+      throw new AppError('Discount offer not found', 404);
+    }
+
+    if (offer.buyerId !== buyer.id) {
+      throw new AppError('You can only revise your own offers', 403);
+    }
+
+    if (offer.status !== 'REJECTED') {
+      throw new AppError('Can only revise rejected offers', 400);
+    }
+
+    // Check revision limit (max 2 revisions allowed)
+    if (offer.revisionCount >= 2) {
+      throw new AppError('Maximum revision limit (2) reached. No more revisions allowed.', 400);
+    }
+
+    // Calculate new discounted amount
+    const discountAmount = offer.invoice.totalAmount * (data.discountPercentage / 100);
+    const discountedAmount = offer.invoice.totalAmount - discountAmount;
+
+    // Set expiry (default 72 hours if not provided)
+    const expiresAt = data.expiresAt
+      ? new Date(data.expiresAt)
+      : new Date(Date.now() + 72 * 60 * 60 * 1000);
+
+    const updated = await prisma.$transaction(async (tx) => {
+      const updatedOffer = await tx.discountOffer.update({
+        where: { id: offerId },
+        data: {
+          discountPercentage: data.discountPercentage,
+          discountedAmount,
+          earlyPaymentDate: new Date(data.earlyPaymentDate),
+          expiresAt,
+          status: 'PENDING',
+          rejectionReason: null,
+          revisionCount: offer.revisionCount + 1,
+          respondedAt: null,
+        },
+      });
+
+      // Ensure invoice is in PENDING_ACCEPTANCE
+      await tx.invoice.update({
+        where: { id: offer.invoiceId },
+        data: { status: 'PENDING_ACCEPTANCE' },
+      });
+
+      return updatedOffer;
+    });
+
+    // Notify seller about revised offer
+    if (offer.invoice.sellerId) {
+      const seller = await prisma.seller.findUnique({
+        where: { id: offer.invoice.sellerId },
+        include: { user: { select: { email: true } } },
+      });
+
+      if (seller?.user?.email) {
+        emailService.sendDiscountOfferReceived(seller.user.email, {
+          sellerName: seller.companyName || 'Seller',
+          buyerName: buyer.companyName || 'Buyer',
+          invoiceNumber: offer.invoice.invoiceNumber,
+          originalAmount: offer.invoice.totalAmount,
+          discountedAmount,
+          discountPercentage: data.discountPercentage,
+          expiresAt: expiresAt,
+          isRevision: true,
+          revisionNumber: offer.revisionCount + 1,
+        }).catch(err => console.error('Failed to send revised offer email:', err));
+      }
+    }
+
     return updated;
+  }
+
+  // Check and mark expired offers
+  async checkExpiredOffers() {
+    const now = new Date();
+
+    const result = await prisma.discountOffer.updateMany({
+      where: {
+        status: 'PENDING',
+        expiresAt: { lt: now },
+      },
+      data: { status: 'EXPIRED' },
+    });
+
+    // Also update corresponding invoices
+    const expiredOffers = await prisma.discountOffer.findMany({
+      where: { status: 'EXPIRED' },
+      select: { invoiceId: true },
+    });
+
+    if (expiredOffers.length > 0) {
+      await prisma.invoice.updateMany({
+        where: {
+          id: { in: expiredOffers.map(o => o.invoiceId) },
+          status: 'PENDING_ACCEPTANCE',
+        },
+        data: { status: 'DRAFT' },
+      });
+    }
+
+    return { expiredCount: result.count };
   }
 
   // Buyer selects funding type after seller accepts the offer
