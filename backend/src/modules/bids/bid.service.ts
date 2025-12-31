@@ -3,6 +3,7 @@ import { prisma } from '../../config/database';
 import { AppError } from '../../middleware/errorHandler';
 import { emailService } from '../../services/email.service';
 import { contractService } from '../contracts/contract.service';
+import { notificationService } from '../notifications/notification.service';
 import { CreateBidInput, UpdateBidInput, ListBidsQuery } from './bid.validation';
 
 export class BidService {
@@ -85,7 +86,7 @@ export class BidService {
     if (invoice.buyerId) {
       const buyer = await prisma.buyer.findUnique({
         where: { id: invoice.buyerId },
-        include: { user: { select: { email: true } } },
+        include: { user: { select: { id: true, email: true } } },
       });
 
       if (buyer?.user?.email) {
@@ -96,6 +97,16 @@ export class BidService {
           bidRate: data.discountRate,
           bidAmount: netAmount,
         }).catch(err => console.error('Failed to send bid notification email:', err));
+      }
+
+      // Create in-app notification for buyer
+      if (buyer?.user?.id) {
+        notificationService.notifyNewBid(
+          buyer.user.id,
+          invoice.invoiceNumber,
+          financier.companyName || 'Financier',
+          netAmount
+        ).catch(err => console.error('Failed to create bid notification:', err));
       }
     }
 
@@ -316,6 +327,9 @@ export class BidService {
             discountOffer: true,
           },
         },
+        financier: {
+          select: { id: true, userId: true, companyName: true }
+        },
       },
     });
 
@@ -379,6 +393,39 @@ export class BidService {
     } catch (err) {
       console.error('Failed to generate contract:', err);
       // Don't fail bid acceptance if contract generation fails
+    }
+
+    // Notify the winning financier that their bid was accepted
+    if (bid.financier?.userId) {
+      notificationService.notifyBidAccepted(
+        bid.financier.userId,
+        bid.invoice.invoiceNumber,
+        bid.netAmount
+      ).catch(err => console.error('Failed to create bid accepted notification:', err));
+    }
+
+    // Notify rejected financiers
+    const rejectedBids = await prisma.bid.findMany({
+      where: {
+        invoiceId: bid.invoiceId,
+        id: { not: bidId },
+        status: 'REJECTED',
+      },
+      include: {
+        financier: { select: { userId: true } },
+      },
+    });
+
+    for (const rejectedBid of rejectedBids) {
+      if (rejectedBid.financier?.userId) {
+        notificationService.createNotification({
+          userId: rejectedBid.financier.userId,
+          type: 'BID_REJECTED',
+          title: 'Bid Not Selected',
+          message: `Your bid for invoice ${bid.invoice.invoiceNumber} was not selected. Another bid was chosen.`,
+          data: { invoiceNumber: bid.invoice.invoiceNumber },
+        }).catch(err => console.error('Failed to create bid rejected notification:', err));
+      }
     }
 
     return { bid: result, contract };

@@ -2,6 +2,7 @@ import { DiscountOfferStatus, FundingType, InvoiceStatus } from '@prisma/client'
 import { prisma } from '../../config/database';
 import { AppError } from '../../middleware/errorHandler';
 import { emailService } from '../../services/email.service';
+import { notificationService } from '../notifications/notification.service';
 import { contractService } from '../contracts/contract.service';
 import {
   CreateDiscountOfferInput,
@@ -74,7 +75,7 @@ export class DiscountService {
     if (invoice.sellerId) {
       const seller = await prisma.seller.findUnique({
         where: { id: invoice.sellerId },
-        include: { user: { select: { email: true } } },
+        include: { user: { select: { id: true, email: true } } },
       });
 
       if (seller?.user?.email) {
@@ -87,6 +88,15 @@ export class DiscountService {
           discountPercentage: data.discountPercentage,
           expiresAt: data.earlyPaymentDate,
         }).catch(err => console.error('Failed to send discount offer email:', err));
+      }
+
+      // Create in-app notification for seller
+      if (seller?.user?.id) {
+        notificationService.notifyDiscountOffer(
+          seller.user.id,
+          invoice.invoiceNumber,
+          data.discountPercentage
+        ).catch(err => console.error('Failed to create discount offer notification:', err));
       }
     }
 
@@ -312,7 +322,7 @@ export class DiscountService {
     // Send email notification to buyer (async, don't wait)
     const buyerWithUser = await prisma.buyer.findUnique({
       where: { id: offer.buyerId },
-      include: { user: { select: { email: true } } },
+      include: { user: { select: { id: true, email: true } } },
     });
 
     if (buyerWithUser?.user?.email) {
@@ -332,6 +342,27 @@ export class DiscountService {
           canRevise,
           revisionsRemaining: 2 - offer.revisionCount,
         }).catch(err => console.error('Failed to send offer rejected email:', err));
+      }
+    }
+
+    // Create in-app notification for buyer
+    if (buyerWithUser?.user?.id) {
+      if (input.action === 'ACCEPT') {
+        notificationService.createNotification({
+          userId: buyerWithUser.user.id,
+          type: 'DISCOUNT_ACCEPTED',
+          title: 'Discount Offer Accepted',
+          message: `${seller.companyName || 'Seller'} has accepted your discount offer for invoice ${offer.invoice.invoiceNumber}. You can now proceed with funding selection.`,
+          data: { invoiceNumber: offer.invoice.invoiceNumber, discountedAmount: offer.discountedAmount },
+        }).catch(err => console.error('Failed to create offer accepted notification:', err));
+      } else {
+        notificationService.createNotification({
+          userId: buyerWithUser.user.id,
+          type: 'DISCOUNT_REJECTED',
+          title: 'Discount Offer Rejected',
+          message: `${seller.companyName || 'Seller'} has rejected your discount offer for invoice ${offer.invoice.invoiceNumber}.${canRevise ? ` You have ${2 - offer.revisionCount} revision(s) remaining.` : ''}`,
+          data: { invoiceNumber: offer.invoice.invoiceNumber, reason: input.rejectionReason, canRevise },
+        }).catch(err => console.error('Failed to create offer rejected notification:', err));
       }
     }
 
@@ -406,7 +437,7 @@ export class DiscountService {
     if (offer.invoice.sellerId) {
       const seller = await prisma.seller.findUnique({
         where: { id: offer.invoice.sellerId },
-        include: { user: { select: { email: true } } },
+        include: { user: { select: { id: true, email: true } } },
       });
 
       if (seller?.user?.email) {
@@ -421,6 +452,17 @@ export class DiscountService {
           isRevision: true,
           revisionNumber: offer.revisionCount + 1,
         }).catch(err => console.error('Failed to send revised offer email:', err));
+      }
+
+      // Create in-app notification for seller about revised offer
+      if (seller?.user?.id) {
+        notificationService.createNotification({
+          userId: seller.user.id,
+          type: 'DISCOUNT_OFFER_RECEIVED',
+          title: 'Revised Discount Offer',
+          message: `${buyer.companyName || 'Buyer'} has revised their discount offer (${data.discountPercentage}%) for invoice ${offer.invoice.invoiceNumber}. Please review.`,
+          data: { invoiceNumber: offer.invoice.invoiceNumber, discountPercentage: data.discountPercentage, isRevision: true },
+        }).catch(err => console.error('Failed to create revised offer notification:', err));
       }
     }
 

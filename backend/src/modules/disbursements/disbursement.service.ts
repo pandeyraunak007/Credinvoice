@@ -2,6 +2,7 @@ import { DisbursementStatus, RepaymentStatus, EntityType } from '@prisma/client'
 import { prisma } from '../../config/database';
 import { AppError } from '../../middleware/errorHandler';
 import { emailService } from '../../services/email.service';
+import { notificationService } from '../notifications/notification.service';
 import {
   InitiateDisbursementInput,
   InitiateFinancierDisbursementInput,
@@ -250,6 +251,26 @@ export class DisbursementService {
           payerName,
         }).catch(err => console.error('Failed to send payment notification email:', err));
       }
+
+      // Create in-app notification for seller
+      if (seller?.userId) {
+        notificationService.notifyDisbursement(
+          seller.userId,
+          updated.invoice.invoiceNumber,
+          updated.amount
+        ).catch(err => console.error('Failed to create disbursement notification:', err));
+      }
+
+      // Also notify buyer about the disbursement
+      if (updated.invoice.buyer?.userId) {
+        notificationService.createNotification({
+          userId: updated.invoice.buyer.userId,
+          type: 'FUNDS_DISBURSED',
+          title: 'Funds Disbursed',
+          message: `Funds of ₹${updated.amount.toLocaleString()} have been disbursed to ${seller?.companyName || 'the seller'} for invoice ${updated.invoice.invoiceNumber}.`,
+          data: { invoiceNumber: updated.invoice.invoiceNumber, amount: updated.amount },
+        }).catch(err => console.error('Failed to create buyer disbursement notification:', err));
+      }
     }
 
     return updated;
@@ -449,7 +470,15 @@ export class DisbursementService {
       where: { id: repaymentId },
       include: {
         disbursement: {
-          include: { financier: true },
+          include: {
+            financier: { include: { user: { select: { id: true } } } },
+            invoice: {
+              include: {
+                buyer: { select: { userId: true, companyName: true } },
+                seller: { select: { userId: true, companyName: true } },
+              },
+            },
+          },
         },
       },
     });
@@ -491,6 +520,42 @@ export class DisbursementService {
 
       return updatedRepayment;
     });
+
+    const invoice = repayment.disbursement.invoice;
+    const invoiceNumber = invoice.invoiceNumber;
+
+    // Notify financier that repayment was received
+    if (repayment.disbursement.financier?.user?.id) {
+      notificationService.createNotification({
+        userId: repayment.disbursement.financier.user.id,
+        type: 'REPAYMENT_RECEIVED',
+        title: 'Repayment Received',
+        message: `Repayment of ₹${repayment.amount.toLocaleString()} for invoice ${invoiceNumber} has been received. The transaction is now complete.`,
+        data: { invoiceNumber, amount: repayment.amount },
+      }).catch(err => console.error('Failed to create repayment received notification:', err));
+    }
+
+    // Notify buyer that invoice is settled
+    if (invoice.buyer?.userId) {
+      notificationService.createNotification({
+        userId: invoice.buyer.userId,
+        type: 'REPAYMENT_RECEIVED',
+        title: 'Invoice Settled',
+        message: `Invoice ${invoiceNumber} has been settled. The repayment has been completed.`,
+        data: { invoiceNumber },
+      }).catch(err => console.error('Failed to create buyer settlement notification:', err));
+    }
+
+    // Notify seller that invoice is settled
+    if (invoice.seller?.userId) {
+      notificationService.createNotification({
+        userId: invoice.seller.userId,
+        type: 'REPAYMENT_RECEIVED',
+        title: 'Invoice Settled',
+        message: `Invoice ${invoiceNumber} has been fully settled.`,
+        data: { invoiceNumber },
+      }).catch(err => console.error('Failed to create seller settlement notification:', err));
+    }
 
     return result;
   }

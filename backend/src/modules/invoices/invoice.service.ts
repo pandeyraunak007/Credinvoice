@@ -1,6 +1,7 @@
 import { UserType, EntityType, ProductType, InvoiceStatus } from '@prisma/client';
 import { prisma } from '../../config/database';
 import { AppError } from '../../middleware/errorHandler';
+import { notificationService } from '../notifications/notification.service';
 import { CreateInvoiceInput, UpdateInvoiceInput, ListInvoicesQuery } from './invoice.validation';
 import { extractInvoiceFromFile, getExtractedValues, InvoiceExtractionResult } from './invoice.extractor';
 
@@ -112,6 +113,36 @@ export class InvoiceService {
         documentUrl,
       },
     });
+
+    // Notify the other party about the uploaded invoice
+    // If buyer uploaded, notify seller; if seller uploaded, notify buyer
+    if (entityType === 'BUYER' && sellerId) {
+      const seller = await prisma.seller.findUnique({
+        where: { id: sellerId },
+        select: { userId: true, companyName: true },
+      });
+      if (seller?.userId) {
+        notificationService.notifyNewInvoice(
+          seller.userId,
+          data.invoiceNumber,
+          data.buyerName
+        ).catch(err => console.error('Failed to create invoice notification:', err));
+      }
+    } else if (entityType === 'SELLER' && buyerId) {
+      const buyer = await prisma.buyer.findUnique({
+        where: { id: buyerId },
+        select: { userId: true, companyName: true },
+      });
+      if (buyer?.userId) {
+        notificationService.createNotification({
+          userId: buyer.userId,
+          type: 'INVOICE_UPLOADED',
+          title: 'New Invoice Uploaded',
+          message: `${data.sellerName} has uploaded invoice ${data.invoiceNumber} for your review.`,
+          data: { invoiceNumber: data.invoiceNumber, sellerName: data.sellerName },
+        }).catch(err => console.error('Failed to create invoice notification:', err));
+      }
+    }
 
     return invoice;
   }
