@@ -538,10 +538,13 @@ export const contractService = {
   // Get contract by ID
   getById: (id) => apiRequest(`/contracts/${id}`),
 
+  // Get contract by invoice ID
+  getByInvoiceId: (invoiceId) => apiRequest(`/contracts/invoice/${invoiceId}`),
+
   // Get contract text (for display)
   getText: (id) => apiRequest(`/contracts/${id}/text`),
 
-  // Download contract as file
+  // Download contract as text file
   download: async (id) => {
     const token = localStorage.getItem('accessToken');
     const response = await fetch(`${API_BASE_URL}/contracts/${id}/download`, {
@@ -558,6 +561,35 @@ export const contractService = {
     const contentDisposition = response.headers.get('Content-Disposition');
     const filenameMatch = contentDisposition?.match(/filename="(.+)"/);
     const filename = filenameMatch ? filenameMatch[1] : `contract-${id}.txt`;
+
+    // Create download link
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    window.URL.revokeObjectURL(url);
+    document.body.removeChild(a);
+  },
+
+  // Download contract as PDF
+  downloadPDF: async (id) => {
+    const token = localStorage.getItem('accessToken');
+    const response = await fetch(`${API_BASE_URL}/contracts/${id}/pdf`, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error('Failed to download contract PDF');
+    }
+
+    const blob = await response.blob();
+    const contentDisposition = response.headers.get('Content-Disposition');
+    const filenameMatch = contentDisposition?.match(/filename="(.+)"/);
+    const filename = filenameMatch ? filenameMatch[1] : `contract-${id}.pdf`;
 
     // Create download link
     const url = window.URL.createObjectURL(blob);

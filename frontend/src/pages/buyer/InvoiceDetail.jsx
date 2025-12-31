@@ -7,7 +7,7 @@ import {
   Wallet, Users, AlertCircle, Loader2, X, Shield, BanknoteIcon, Building,
   RefreshCw, XCircle, Edit3, Send
 } from 'lucide-react';
-import { invoiceService, discountService, profileService } from '../../services/api';
+import { invoiceService, discountService, profileService, contractService } from '../../services/api';
 
 const StatusBadge = ({ status }) => {
   const config = {
@@ -673,6 +673,8 @@ export default function InvoiceDetail() {
   const [invoice, setInvoice] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [contract, setContract] = useState(null);
+  const [downloadingContract, setDownloadingContract] = useState(false);
 
   // Modal states
   const [fundingModal, setFundingModal] = useState(false);
@@ -684,6 +686,13 @@ export default function InvoiceDetail() {
     fetchInvoice();
   }, [id]);
 
+  useEffect(() => {
+    // Fetch contract when invoice is loaded and is in a state that should have a contract
+    if (invoice && ['DISBURSED', 'SETTLED', 'BID_SELECTED'].includes(invoice.status)) {
+      fetchContract();
+    }
+  }, [invoice?.id, invoice?.status]);
+
   const fetchInvoice = async () => {
     try {
       setLoading(true);
@@ -694,6 +703,31 @@ export default function InvoiceDetail() {
       setError(err.message || 'Failed to load invoice');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchContract = async () => {
+    try {
+      const response = await contractService.getByInvoiceId(id);
+      if (response.data) {
+        setContract(response.data);
+      }
+    } catch (err) {
+      console.error('Failed to fetch contract:', err);
+      // Don't show error - contract may not exist yet
+    }
+  };
+
+  const handleDownloadContract = async () => {
+    if (!contract) return;
+    try {
+      setDownloadingContract(true);
+      await contractService.downloadPDF(contract.id);
+    } catch (err) {
+      console.error('Failed to download contract:', err);
+      alert('Failed to download contract');
+    } finally {
+      setDownloadingContract(false);
     }
   };
 
@@ -1313,6 +1347,23 @@ export default function InvoiceDetail() {
                       <div className="flex items-center space-x-3"><MessageSquare size={18} className="text-gray-500" /><span>Contact Seller</span></div>
                       <ChevronRight size={16} className="text-gray-400" />
                     </button>
+                    {contract && (
+                      <button
+                        onClick={handleDownloadContract}
+                        disabled={downloadingContract}
+                        className="w-full flex items-center justify-between p-3 hover:bg-blue-50 rounded-lg text-blue-600"
+                      >
+                        <div className="flex items-center space-x-3">
+                          {downloadingContract ? (
+                            <Loader2 size={18} className="animate-spin" />
+                          ) : (
+                            <FileText size={18} />
+                          )}
+                          <span>View Contract</span>
+                        </div>
+                        <ChevronRight size={16} />
+                      </button>
+                    )}
                   </div>
                 </div>
               </div>

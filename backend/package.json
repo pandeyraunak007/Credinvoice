@@ -27,6 +27,7 @@
     "multer": "^1.4.5-lts.1",
     "node-cache": "^5.1.2",
     "nodemailer": "^7.0.12",
+    "pdfkit": "^0.17.2",
     "uuid": "^10.0.0",
     "zod": "^3.23.8"
   },
@@ -37,6 +38,7 @@
     "@types/jsonwebtoken": "^9.0.7",
     "@types/multer": "^1.4.12",
     "@types/node": "^22.9.0",
+    "@types/pdfkit": "^0.17.4",
     "@types/uuid": "^10.0.0",
     "prisma": "^5.22.0",
     "tsx": "^4.19.2",
