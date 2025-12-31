@@ -4,9 +4,9 @@ import {
   Search, Filter, Download, Plus, FileText, Clock, CheckCircle,
   XCircle, AlertCircle, ChevronRight, ChevronDown, MoreVertical,
   Eye, Edit, Trash2, Send, CreditCard, Building2, Calendar,
-  ArrowUpDown, RefreshCw, ArrowLeft, Loader2
+  ArrowUpDown, RefreshCw, ArrowLeft, Loader2, Wallet, Users, X
 } from 'lucide-react';
-import { invoiceService } from '../../services/api';
+import { invoiceService, discountService } from '../../services/api';
 
 const statusConfig = {
   DRAFT: { label: 'Draft', color: 'bg-gray-100 text-gray-700', icon: FileText },
@@ -20,6 +20,90 @@ const statusConfig = {
   OVERDUE: { label: 'Overdue', color: 'bg-red-100 text-red-700', icon: AlertCircle },
 };
 
+// Funding Type Selection Modal
+const FundingTypeModal = ({ isOpen, onClose, invoice, onSelectFundingType, isLoading }) => {
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+      <div className="bg-white rounded-2xl max-w-lg w-full mx-4 overflow-hidden shadow-2xl">
+        <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
+          <div>
+            <h3 className="text-lg font-semibold text-gray-800">Choose Funding Type</h3>
+            <p className="text-sm text-gray-500">Invoice: {invoice?.invoiceNumber}</p>
+          </div>
+          <button onClick={onClose} className="p-1 hover:bg-gray-100 rounded-lg">
+            <X size={20} className="text-gray-500" />
+          </button>
+        </div>
+
+        <div className="p-6">
+          <p className="text-gray-600 mb-6">
+            The seller has accepted your discount offer. How would you like to fund this early payment?
+          </p>
+
+          <div className="space-y-4">
+            {/* Self-Funded Option */}
+            <button
+              onClick={() => onSelectFundingType('SELF_FUNDED')}
+              disabled={isLoading}
+              className="w-full p-4 border-2 border-gray-200 rounded-xl hover:border-blue-500 hover:bg-blue-50 transition text-left group disabled:opacity-50"
+            >
+              <div className="flex items-start space-x-4">
+                <div className="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center group-hover:bg-blue-200 transition">
+                  <Wallet size={24} className="text-blue-600" />
+                </div>
+                <div className="flex-1">
+                  <h4 className="font-semibold text-gray-800 mb-1">Self-Funded</h4>
+                  <p className="text-sm text-gray-600">
+                    Pay the discounted amount directly from your account. Immediate processing with no financier fees.
+                  </p>
+                  <div className="mt-2 flex items-center space-x-4 text-sm">
+                    <span className="text-green-600 font-medium">No additional fees</span>
+                    <span className="text-gray-400">|</span>
+                    <span className="text-gray-600">Instant authorization</span>
+                  </div>
+                </div>
+              </div>
+            </button>
+
+            {/* Financier-Funded Option */}
+            <button
+              onClick={() => onSelectFundingType('FINANCIER_FUNDED')}
+              disabled={isLoading}
+              className="w-full p-4 border-2 border-gray-200 rounded-xl hover:border-purple-500 hover:bg-purple-50 transition text-left group disabled:opacity-50"
+            >
+              <div className="flex items-start space-x-4">
+                <div className="w-12 h-12 bg-purple-100 rounded-xl flex items-center justify-center group-hover:bg-purple-200 transition">
+                  <Users size={24} className="text-purple-600" />
+                </div>
+                <div className="flex-1">
+                  <h4 className="font-semibold text-gray-800 mb-1">Financier-Funded</h4>
+                  <p className="text-sm text-gray-600">
+                    Let financiers bid to fund this invoice. Choose the best offer and repay on the due date.
+                  </p>
+                  <div className="mt-2 flex items-center space-x-4 text-sm">
+                    <span className="text-purple-600 font-medium">Competitive rates</span>
+                    <span className="text-gray-400">|</span>
+                    <span className="text-gray-600">Multiple bids</span>
+                  </div>
+                </div>
+              </div>
+            </button>
+          </div>
+
+          {isLoading && (
+            <div className="mt-4 flex items-center justify-center space-x-2 text-gray-600">
+              <Loader2 size={18} className="animate-spin" />
+              <span>Processing...</span>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
+
 export default function InvoicesPage() {
   const navigate = useNavigate();
   const [invoices, setInvoices] = useState([]);
@@ -30,6 +114,10 @@ export default function InvoicesPage() {
   const [sellerFilter, setSellerFilter] = useState('all');
   const [showFilters, setShowFilters] = useState(false);
   const [selectedInvoices, setSelectedInvoices] = useState([]);
+
+  // Funding type modal state
+  const [fundingModal, setFundingModal] = useState({ isOpen: false, invoice: null });
+  const [fundingLoading, setFundingLoading] = useState(false);
 
   const fetchInvoices = async () => {
     try {
@@ -95,6 +183,35 @@ export default function InvoicesPage() {
     }
   };
 
+  const handleOpenFundingModal = (e, invoice) => {
+    e.stopPropagation();
+    setFundingModal({ isOpen: true, invoice });
+  };
+
+  const handleSelectFundingType = async (fundingType) => {
+    if (!fundingModal.invoice?.discountOffer?.id) {
+      console.error('No discount offer ID found');
+      return;
+    }
+
+    setFundingLoading(true);
+    try {
+      await discountService.selectFundingType(fundingModal.invoice.discountOffer.id, fundingType);
+      setFundingModal({ isOpen: false, invoice: null });
+      fetchInvoices();
+
+      if (fundingType === 'SELF_FUNDED') {
+        // Navigate to invoice detail for payment authorization
+        navigate(`/invoices/${fundingModal.invoice.id}`);
+      }
+    } catch (err) {
+      console.error('Failed to select funding type:', err);
+      alert(err.message || 'Failed to select funding type');
+    } finally {
+      setFundingLoading(false);
+    }
+  };
+
   const getActionButtons = (invoice) => {
     switch (invoice.status) {
       case 'DRAFT':
@@ -124,21 +241,29 @@ export default function InvoicesPage() {
           </div>
         );
       case 'ACCEPTED':
-        return (
-          <div className="flex items-center space-x-2">
-            <button
-              onClick={(e) => handleOpenForBidding(e, invoice.id)}
-              className="bg-purple-600 text-white px-3 py-1 rounded-lg text-sm hover:bg-purple-700"
-            >
-              Open Bidding
-            </button>
+        // Check if funding type is already selected
+        const fundingType = invoice.discountOffer?.fundingType;
+        if (fundingType === 'SELF_FUNDED') {
+          // Funding type selected as self-funded, show authorize payment button
+          return (
             <button
               onClick={(e) => { e.stopPropagation(); navigate(`/invoices/${invoice.id}`); }}
-              className="bg-blue-600 text-white px-3 py-1 rounded-lg text-sm hover:bg-blue-700"
+              className="bg-blue-600 text-white px-3 py-1 rounded-lg text-sm hover:bg-blue-700 flex items-center space-x-1"
             >
-              Self-Fund
+              <Wallet size={14} />
+              <span>Authorize Payment</span>
             </button>
-          </div>
+          );
+        }
+        // No funding type selected yet, show selection button
+        return (
+          <button
+            onClick={(e) => handleOpenFundingModal(e, invoice)}
+            className="bg-green-600 text-white px-3 py-1 rounded-lg text-sm hover:bg-green-700 flex items-center space-x-1"
+          >
+            <CreditCard size={14} />
+            <span>Choose Funding</span>
+          </button>
         );
       case 'OPEN_FOR_BIDDING':
         const bidsCount = invoice.bids?.length || 0;
@@ -430,6 +555,15 @@ export default function InvoicesPage() {
           </div>
         </div>
       </div>
+
+      {/* Funding Type Selection Modal */}
+      <FundingTypeModal
+        isOpen={fundingModal.isOpen}
+        onClose={() => setFundingModal({ isOpen: false, invoice: null })}
+        invoice={fundingModal.invoice}
+        onSelectFundingType={handleSelectFundingType}
+        isLoading={fundingLoading}
+      />
     </div>
   );
 }

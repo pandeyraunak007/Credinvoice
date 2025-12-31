@@ -6,6 +6,7 @@ import {
   updateDiscountOfferSchema,
   respondDiscountOfferSchema,
   authorizePaymentSchema,
+  selectFundingTypeSchema,
 } from './discount.validation';
 import {
   createDiscountOffer,
@@ -16,6 +17,7 @@ import {
   respondToOffer,
   cancelOffer,
   authorizePayment,
+  selectFundingType,
 } from './discount.controller';
 
 const router = Router();
@@ -33,6 +35,12 @@ router.post(
   buyerOnly,
   validateBody(authorizePaymentSchema),
   authorizePayment
+);
+router.post(
+  '/:offerId/select-funding-type',
+  buyerOnly,
+  validateBody(selectFundingTypeSchema),
+  selectFundingType
 );
 
 // Seller routes

@@ -126,3 +126,23 @@ export const authorizePayment = asyncHandler(async (req: Request, res: Response)
 
   return sendSuccess(res, disbursement, 'Payment authorized successfully');
 });
+
+// Select funding type after seller accepts (Buyer)
+export const selectFundingType = asyncHandler(async (req: Request, res: Response) => {
+  if (!req.user) {
+    return sendError(res, 'Not authenticated', 401);
+  }
+
+  const { offerId } = req.params;
+  const offer = await discountService.selectFundingType(
+    offerId,
+    req.user.userId,
+    req.body
+  );
+
+  const message = req.body.fundingType === 'SELF_FUNDED'
+    ? 'Self-funding selected. You can now authorize payment.'
+    : 'Financier funding selected. Invoice is now open for bidding.';
+
+  return sendSuccess(res, offer, message);
+});

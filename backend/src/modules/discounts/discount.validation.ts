@@ -1,13 +1,13 @@
 import { z } from 'zod';
 
-// Create discount offer schema
+// Create discount offer schema (fundingType is optional - set after seller accepts)
 export const createDiscountOfferSchema = z.object({
   invoiceId: z.string().uuid('Invalid invoice ID'),
   discountPercentage: z.number()
     .positive('Discount must be positive')
     .max(50, 'Discount cannot exceed 50%'),
   earlyPaymentDate: z.string().transform((str) => new Date(str)),
-  fundingType: z.enum(['SELF_FUNDED', 'FINANCIER_FUNDED']),
+  fundingType: z.enum(['SELF_FUNDED', 'FINANCIER_FUNDED']).optional(),
 }).refine(
   (data) => data.earlyPaymentDate > new Date(),
   { message: 'Early payment date must be in the future', path: ['earlyPaymentDate'] }
@@ -42,6 +42,11 @@ export const authorizePaymentSchema = z.object({
   bankAccountId: z.string().uuid('Invalid bank account ID'),
 });
 
+// Select funding type schema (buyer selects after seller accepts)
+export const selectFundingTypeSchema = z.object({
+  fundingType: z.enum(['SELF_FUNDED', 'FINANCIER_FUNDED']),
+});
+
 // List discount offers query
 export const listDiscountOffersQuerySchema = z.object({
   status: z.enum(['PENDING', 'ACCEPTED', 'REJECTED', 'EXPIRED', 'CANCELLED']).optional(),
@@ -53,4 +58,5 @@ export type CreateDiscountOfferInput = z.infer<typeof createDiscountOfferSchema>
 export type UpdateDiscountOfferInput = z.infer<typeof updateDiscountOfferSchema>;
 export type RespondDiscountOfferInput = z.infer<typeof respondDiscountOfferSchema>;
 export type AuthorizePaymentInput = z.infer<typeof authorizePaymentSchema>;
+export type SelectFundingTypeInput = z.infer<typeof selectFundingTypeSchema>;
 export type ListDiscountOffersQuery = z.infer<typeof listDiscountOffersQuerySchema>;

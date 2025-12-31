@@ -300,16 +300,40 @@ export const discountService = {
 
   getById: (id) => apiRequest(`/discounts/${id}`),
 
+  getMyOffers: () => apiRequest('/discounts/my-offers'),
+
   getPending: () => apiRequest('/discounts/pending'),
 
-  accept: (id) =>
-    apiRequest(`/discounts/${id}/accept`, {
+  respond: (id, data) =>
+    apiRequest(`/discounts/${id}/respond`, {
       method: 'POST',
+      body: JSON.stringify(data),
     }),
 
-  reject: (id) =>
-    apiRequest(`/discounts/${id}/reject`, {
+  accept: (id) =>
+    apiRequest(`/discounts/${id}/respond`, {
       method: 'POST',
+      body: JSON.stringify({ action: 'ACCEPT' }),
+    }),
+
+  reject: (id, reason) =>
+    apiRequest(`/discounts/${id}/respond`, {
+      method: 'POST',
+      body: JSON.stringify({ action: 'REJECT', rejectionReason: reason }),
+    }),
+
+  // Buyer selects funding type after seller accepts
+  selectFundingType: (id, fundingType) =>
+    apiRequest(`/discounts/${id}/select-funding-type`, {
+      method: 'POST',
+      body: JSON.stringify({ fundingType }),
+    }),
+
+  // Buyer authorizes self-funded payment
+  authorizePayment: (id, bankAccountId) =>
+    apiRequest(`/discounts/${id}/authorize-payment`, {
+      method: 'POST',
+      body: JSON.stringify({ bankAccountId }),
     }),
 };
 
@@ -465,6 +489,31 @@ export const analyticsService = {
     apiRequest(`/analytics/admin/invoice-distribution?period=${period}`),
 };
 
+// Notification Service
+export const notificationService = {
+  getAll: (params = {}) => {
+    const query = new URLSearchParams(params).toString();
+    return apiRequest(`/notifications${query ? `?${query}` : ''}`);
+  },
+
+  getUnreadCount: () => apiRequest('/notifications?unreadOnly=true&limit=1'),
+
+  markAsRead: (notificationId) =>
+    apiRequest(`/notifications/${notificationId}/read`, {
+      method: 'POST',
+    }),
+
+  markAllAsRead: () =>
+    apiRequest('/notifications/mark-all-read', {
+      method: 'POST',
+    }),
+
+  delete: (notificationId) =>
+    apiRequest(`/notifications/${notificationId}`, {
+      method: 'DELETE',
+    }),
+};
+
 export default {
   auth: authService,
   profile: profileService,
@@ -475,4 +524,5 @@ export default {
   disbursement: disbursementService,
   admin: adminService,
   analytics: analyticsService,
+  notification: notificationService,
 };

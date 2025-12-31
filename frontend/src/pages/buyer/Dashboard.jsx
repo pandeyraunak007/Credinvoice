@@ -1,39 +1,185 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import {
-  Bell, Plus, FileText, TrendingUp, Clock, CreditCard, Users, AlertCircle,
-  ChevronRight, Download, Building2, IndianRupee, CheckCircle, BarChart3
+  Plus, FileText, TrendingUp, Clock, CreditCard, Users, AlertCircle,
+  ChevronRight, Download, Building2, IndianRupee, CheckCircle, BarChart3, Loader2, Settings
 } from 'lucide-react';
+import { invoiceService, discountService, disbursementService } from '../../services/api';
+import { useAuth } from '../../context/AuthContext';
+import NotificationDropdown from '../../components/NotificationDropdown';
 
 export default function BuyerDashboard() {
   const navigate = useNavigate();
+  const { user, profile } = useAuth();
   const [selectedPeriod, setSelectedPeriod] = useState('thisMonth');
-  
-  const kpis = {
-    activeInvoices: 77,
-    totalUpcoming: 7.77,
-    discountsCaptured: 23.5,
-    pendingActions: 12
+  const [loading, setLoading] = useState(true);
+
+  // Real data state
+  const [invoices, setInvoices] = useState([]);
+  const [discountOffers, setDiscountOffers] = useState([]);
+  const [disbursements, setDisbursements] = useState([]);
+  const [kpis, setKpis] = useState({
+    activeInvoices: 0,
+    totalUpcoming: 0,
+    discountsCaptured: 0,
+    pendingActions: 0
+  });
+
+  const buyerInfo = profile?.buyer || {};
+  const companyInitials = buyerInfo.companyName ? buyerInfo.companyName.substring(0, 2).toUpperCase() : 'BU';
+
+  useEffect(() => {
+    fetchDashboardData();
+  }, []);
+
+  const fetchDashboardData = async () => {
+    try {
+      setLoading(true);
+
+      // Fetch all data in parallel
+      const [invoicesRes, offersRes, disbursementsRes] = await Promise.all([
+        invoiceService.list(),
+        discountService.getMyOffers().catch(() => ({ data: [] })),
+        disbursementService.list().catch(() => ({ data: [] })),
+      ]);
+
+      const invoiceData = invoicesRes.data?.invoices || invoicesRes.data || [];
+      const offersData = offersRes.data || [];
+      const disbursementData = disbursementsRes.data || [];
+
+      setInvoices(invoiceData);
+      setDiscountOffers(offersData);
+      setDisbursements(disbursementData);
+
+      // Calculate KPIs from real data
+      const activeCount = invoiceData.filter(inv =>
+        !['SETTLED', 'CANCELLED', 'REJECTED'].includes(inv.status)
+      ).length;
+
+      const upcomingPayments = invoiceData
+        .filter(inv => ['ACCEPTED', 'BID_SELECTED', 'DISBURSED'].includes(inv.status))
+        .reduce((sum, inv) => sum + (inv.totalAmount || 0), 0);
+
+      const completedDisbursements = disbursementData.filter(d => d.status === 'COMPLETED');
+      const discountSavings = completedDisbursements.reduce((sum, d) => {
+        const originalAmount = d.invoice?.totalAmount || 0;
+        const paidAmount = d.amount || 0;
+        return sum + (originalAmount - paidAmount);
+      }, 0);
+
+      const pendingCount = invoiceData.filter(inv =>
+        ['PENDING_ACCEPTANCE', 'OPEN_FOR_BIDDING', 'ACCEPTED'].includes(inv.status)
+      ).length;
+
+      setKpis({
+        activeInvoices: activeCount,
+        totalUpcoming: (upcomingPayments / 10000000).toFixed(2), // In Crores
+        discountsCaptured: (discountSavings / 100000).toFixed(1), // In Lakhs
+        pendingActions: pendingCount
+      });
+
+    } catch (error) {
+      console.error('Failed to fetch dashboard data:', error);
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const pendingActions = [
-    { id: 1, type: 'acceptance', seller: 'Kumar Textiles', amount: 2.5, days: 2, urgent: true, invoiceId: 'INV-2024-0077' },
-    { id: 2, type: 'bid_review', seller: 'Steel Corp', amount: 5.0, bids: 4, expires: '2h', invoiceId: 'INV-2024-0076' },
-    { id: 3, type: 'payment', seller: 'Auto Parts Ltd', amount: 1.2, status: 'ready', invoiceId: 'INV-2024-0075' },
-    { id: 4, type: 'acceptance', seller: 'Fabric House', amount: 3.1, days: 5, urgent: false, invoiceId: 'INV-2024-0074' },
-  ];
+  // Build pending actions from real data
+  const pendingActions = invoices
+    .filter(inv => ['PENDING_ACCEPTANCE', 'OPEN_FOR_BIDDING', 'ACCEPTED'].includes(inv.status))
+    .slice(0, 5)
+    .map(inv => {
+      const daysRemaining = Math.ceil((new Date(inv.dueDate) - new Date()) / (1000 * 60 * 60 * 24));
 
-  const recentPayments = [
-    { id: 1, seller: 'Kumar Textiles', amount: 77, date: 'Dec 31, 2024', type: 'Self-Funded' },
-    { id: 2, seller: 'Steel Corp', amount: 125, date: 'Dec 30, 2024', type: 'Financier' },
-    { id: 3, seller: 'Auto Parts Ltd', amount: 45, date: 'Dec 28, 2024', type: 'Self-Funded' },
-    { id: 4, seller: 'Fabric House', amount: 89, date: 'Dec 27, 2024', type: 'Financier' },
-  ];
+      if (inv.status === 'PENDING_ACCEPTANCE') {
+        return {
+          id: inv.id,
+          type: 'acceptance',
+          seller: inv.sellerName || inv.seller?.companyName || 'Unknown Seller',
+          amount: (inv.totalAmount / 100000).toFixed(1),
+          days: daysRemaining,
+          urgent: daysRemaining <= 3,
+          invoiceId: inv.id
+        };
+      } else if (inv.status === 'OPEN_FOR_BIDDING') {
+        return {
+          id: inv.id,
+          type: 'bid_review',
+          seller: inv.sellerName || inv.seller?.companyName || 'Unknown Seller',
+          amount: (inv.totalAmount / 100000).toFixed(1),
+          bids: inv._count?.bids || inv.bids?.length || 0,
+          expires: `${Math.max(0, daysRemaining)}d`,
+          invoiceId: inv.id
+        };
+      } else if (inv.status === 'ACCEPTED' && inv.discountOffer?.status === 'ACCEPTED' && !inv.discountOffer?.fundingType) {
+        return {
+          id: inv.id,
+          type: 'funding_choice',
+          seller: inv.sellerName || inv.seller?.companyName || 'Unknown Seller',
+          amount: (inv.totalAmount / 100000).toFixed(1),
+          status: 'choose_funding',
+          invoiceId: inv.id
+        };
+      } else {
+        return {
+          id: inv.id,
+          type: 'payment',
+          seller: inv.sellerName || inv.seller?.companyName || 'Unknown Seller',
+          amount: (inv.totalAmount / 100000).toFixed(1),
+          status: 'ready',
+          invoiceId: inv.id
+        };
+      }
+    });
 
-  const urgentAlerts = [
-    { id: 1, message: '3 bids expiring today', type: 'warning' },
-    { id: 2, message: '5 invoices pending acceptance >3 days', type: 'info' },
-  ];
+  // Build recent payments from real disbursement data
+  const recentPayments = disbursements
+    .filter(d => d.status === 'COMPLETED')
+    .slice(0, 5)
+    .map(d => ({
+      id: d.id,
+      seller: d.invoice?.sellerName || 'Unknown Seller',
+      amount: ((d.amount || 0) / 100000).toFixed(1),
+      date: new Date(d.completedAt || d.createdAt).toLocaleDateString('en-IN', {
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric'
+      }),
+      type: d.payerType === 'BUYER' ? 'Self-Funded' : 'Financier'
+    }));
+
+  // Build alerts from real data
+  const urgentAlerts = [];
+  const expiringBids = invoices.filter(inv =>
+    inv.status === 'OPEN_FOR_BIDDING' &&
+    Math.ceil((new Date(inv.dueDate) - new Date()) / (1000 * 60 * 60 * 24)) <= 1
+  );
+  if (expiringBids.length > 0) {
+    urgentAlerts.push({ id: 1, message: `${expiringBids.length} invoice(s) with bids expiring soon`, type: 'warning' });
+  }
+
+  const pendingLong = invoices.filter(inv =>
+    inv.status === 'PENDING_ACCEPTANCE' &&
+    Math.ceil((new Date() - new Date(inv.createdAt)) / (1000 * 60 * 60 * 24)) > 3
+  );
+  if (pendingLong.length > 0) {
+    urgentAlerts.push({ id: 2, message: `${pendingLong.length} invoice(s) pending acceptance >3 days`, type: 'info' });
+  }
+
+  const openForBiddingCount = invoices.filter(inv => inv.status === 'OPEN_FOR_BIDDING').length;
+  const pendingAcceptanceCount = invoices.filter(inv => inv.status === 'PENDING_ACCEPTANCE').length;
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="flex items-center space-x-2 text-gray-600">
+          <Loader2 className="animate-spin" size={24} />
+          <span>Loading dashboard...</span>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -47,15 +193,22 @@ export default function BuyerDashboard() {
             <span className="text-xl font-bold text-gray-800">CRED<span className="text-red-600">INVOICE</span></span>
           </Link>
           <div className="flex items-center space-x-4">
-            <button className="relative p-2 text-gray-600 hover:bg-gray-100 rounded-lg">
-              <Bell size={20} />
-              <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white text-xs rounded-full flex items-center justify-center">8</span>
+            <NotificationDropdown />
+            <button
+              onClick={() => navigate('/account')}
+              className="p-2 text-gray-600 hover:bg-gray-100 rounded-lg"
+              title="Settings"
+            >
+              <Settings size={20} />
             </button>
-            <div className="flex items-center space-x-2">
+            <div
+              className="flex items-center space-x-2 cursor-pointer hover:bg-gray-100 px-2 py-1 rounded-lg"
+              onClick={() => navigate('/account')}
+            >
               <div className="w-8 h-8 bg-blue-600 rounded-full flex items-center justify-center">
-                <span className="text-white text-sm font-medium">AM</span>
+                <span className="text-white text-sm font-medium">{companyInitials}</span>
               </div>
-              <span className="text-sm font-medium text-gray-700">Ansai Mart</span>
+              <span className="text-sm font-medium text-gray-700">{buyerInfo.companyName || 'Buyer'}</span>
             </div>
           </div>
         </div>
@@ -72,16 +225,23 @@ export default function BuyerDashboard() {
             <Link to="/invoices" className="flex items-center space-x-3 px-3 py-2.5 text-gray-700 hover:bg-gray-50 rounded-lg">
               <FileText size={20} />
               <span>Invoices</span>
+              {invoices.length > 0 && (
+                <span className="ml-auto bg-gray-100 text-gray-700 text-xs px-2 py-0.5 rounded-full">{invoices.length}</span>
+              )}
             </Link>
             <Link to="/invoices" className="flex items-center space-x-3 px-3 py-2.5 text-gray-700 hover:bg-gray-50 rounded-lg">
               <CreditCard size={20} />
               <span>Discount Offers</span>
-              <span className="ml-auto bg-orange-100 text-orange-700 text-xs px-2 py-0.5 rounded-full">5</span>
+              {pendingAcceptanceCount > 0 && (
+                <span className="ml-auto bg-orange-100 text-orange-700 text-xs px-2 py-0.5 rounded-full">{pendingAcceptanceCount}</span>
+              )}
             </Link>
             <Link to="/invoices" className="flex items-center space-x-3 px-3 py-2.5 text-gray-700 hover:bg-gray-50 rounded-lg">
               <Clock size={20} />
               <span>Bidding</span>
-              <span className="ml-auto bg-blue-100 text-blue-700 text-xs px-2 py-0.5 rounded-full">4</span>
+              {openForBiddingCount > 0 && (
+                <span className="ml-auto bg-blue-100 text-blue-700 text-xs px-2 py-0.5 rounded-full">{openForBiddingCount}</span>
+              )}
             </Link>
             <Link to="/invoices" className="flex items-center space-x-3 px-3 py-2.5 text-gray-700 hover:bg-gray-50 rounded-lg">
               <Users size={20} />
@@ -103,10 +263,10 @@ export default function BuyerDashboard() {
           {/* Header */}
           <div className="flex items-center justify-between mb-6">
             <div>
-              <h1 className="text-2xl font-bold text-gray-800">Welcome, Amit</h1>
+              <h1 className="text-2xl font-bold text-gray-800">Welcome, {buyerInfo.contactName || user?.email?.split('@')[0] || 'User'}</h1>
               <p className="text-gray-500 text-sm">Here's what's happening with your supply chain finance</p>
             </div>
-            <button 
+            <button
               onClick={() => navigate('/invoices/create')}
               className="flex items-center space-x-2 bg-blue-600 text-white px-4 py-2.5 rounded-lg hover:bg-blue-700 transition font-medium"
             >
@@ -122,7 +282,7 @@ export default function BuyerDashboard() {
                 <div key={alert.id} className={`flex items-center space-x-3 px-4 py-3 rounded-lg ${alert.type === 'warning' ? 'bg-amber-50 border border-amber-200' : 'bg-blue-50 border border-blue-200'}`}>
                   <AlertCircle size={18} className={alert.type === 'warning' ? 'text-amber-600' : 'text-blue-600'} />
                   <span className={`text-sm font-medium ${alert.type === 'warning' ? 'text-amber-800' : 'text-blue-800'}`}>{alert.message}</span>
-                  <button 
+                  <button
                     onClick={() => navigate('/invoices')}
                     className={`ml-auto text-sm font-medium ${alert.type === 'warning' ? 'text-amber-700 hover:text-amber-900' : 'text-blue-700 hover:text-blue-900'}`}
                   >
@@ -137,10 +297,11 @@ export default function BuyerDashboard() {
           <div className="flex items-center space-x-4 mb-6">
             <select className="border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white">
               <option>All Sellers</option>
-              <option>Kumar Textiles</option>
-              <option>Steel Corp</option>
+              {[...new Set(invoices.map(inv => inv.sellerName || inv.seller?.companyName).filter(Boolean))].map(seller => (
+                <option key={seller}>{seller}</option>
+              ))}
             </select>
-            <select 
+            <select
               value={selectedPeriod}
               onChange={(e) => setSelectedPeriod(e.target.value)}
               className="border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white"
@@ -166,7 +327,7 @@ export default function BuyerDashboard() {
                 </div>
               </div>
               <p className="text-3xl font-bold text-gray-800">{kpis.activeInvoices}</p>
-              <p className="text-green-600 text-sm mt-1">+12% from last month</p>
+              <p className="text-gray-500 text-sm mt-1">In progress</p>
             </div>
 
             <div className="bg-white rounded-xl p-5 border border-gray-200 shadow-sm">
@@ -188,10 +349,10 @@ export default function BuyerDashboard() {
                 </div>
               </div>
               <p className="text-3xl font-bold text-green-600">₹{kpis.discountsCaptured} <span className="text-lg font-normal text-gray-500">L</span></p>
-              <p className="text-gray-500 text-sm mt-1">This month's savings</p>
+              <p className="text-gray-500 text-sm mt-1">Total savings</p>
             </div>
 
-            <div 
+            <div
               onClick={() => navigate('/invoices')}
               className="bg-white rounded-xl p-5 border border-gray-200 shadow-sm relative cursor-pointer hover:border-red-300 transition"
             >
@@ -208,28 +369,32 @@ export default function BuyerDashboard() {
 
           {/* Quick Actions */}
           <div className="grid grid-cols-3 gap-4 mb-6">
-            <button 
+            <button
               onClick={() => navigate('/invoices/create')}
               className="flex items-center justify-center space-x-3 bg-gradient-to-r from-blue-600 to-blue-700 text-white py-4 px-6 rounded-xl hover:from-blue-700 hover:to-blue-800 transition shadow-sm"
             >
               <Plus size={20} />
               <span className="font-medium">Start Dynamic Discounting</span>
             </button>
-            <button 
-              onClick={() => navigate('/invoices/INV-2024-0076/bids')}
+            <button
+              onClick={() => navigate('/invoices')}
               className="flex items-center justify-center space-x-3 bg-white border-2 border-gray-200 text-gray-700 py-4 px-6 rounded-xl hover:border-blue-300 hover:bg-blue-50 transition"
             >
               <Clock size={20} />
               <span className="font-medium">View Active Bids</span>
-              <span className="bg-blue-600 text-white text-xs px-2 py-0.5 rounded-full">4</span>
+              {openForBiddingCount > 0 && (
+                <span className="bg-blue-600 text-white text-xs px-2 py-0.5 rounded-full">{openForBiddingCount}</span>
+              )}
             </button>
-            <button 
+            <button
               onClick={() => navigate('/invoices')}
               className="flex items-center justify-center space-x-3 bg-white border-2 border-gray-200 text-gray-700 py-4 px-6 rounded-xl hover:border-blue-300 hover:bg-blue-50 transition"
             >
               <CreditCard size={20} />
               <span className="font-medium">Pending Approvals</span>
-              <span className="bg-orange-500 text-white text-xs px-2 py-0.5 rounded-full">5</span>
+              {pendingAcceptanceCount > 0 && (
+                <span className="bg-orange-500 text-white text-xs px-2 py-0.5 rounded-full">{pendingAcceptanceCount}</span>
+              )}
             </button>
           </div>
 
@@ -240,49 +405,59 @@ export default function BuyerDashboard() {
                 <h2 className="font-semibold text-gray-800">Pending Actions</h2>
                 <Link to="/invoices" className="text-blue-600 text-sm font-medium hover:text-blue-700">View All →</Link>
               </div>
-              <div className="divide-y divide-gray-100">
-                {pendingActions.map(action => (
-                  <div 
-                    key={action.id} 
-                    onClick={() => {
-                      if (action.type === 'bid_review') {
-                        navigate(`/invoices/${action.invoiceId}/bids`);
-                      } else {
-                        navigate(`/invoices/${action.invoiceId}`);
-                      }
-                    }}
-                    className="p-4 hover:bg-gray-50 transition cursor-pointer"
-                  >
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center space-x-4">
-                        <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
-                          action.type === 'acceptance' ? 'bg-orange-100' : 
-                          action.type === 'bid_review' ? 'bg-blue-100' : 'bg-green-100'
-                        }`}>
-                          {action.type === 'acceptance' && <Clock size={18} className="text-orange-600" />}
-                          {action.type === 'bid_review' && <CreditCard size={18} className="text-blue-600" />}
-                          {action.type === 'payment' && <CheckCircle size={18} className="text-green-600" />}
+              {pendingActions.length === 0 ? (
+                <div className="p-8 text-center text-gray-500">
+                  <CheckCircle size={32} className="mx-auto mb-2 text-green-500" />
+                  <p>No pending actions. You're all caught up!</p>
+                </div>
+              ) : (
+                <div className="divide-y divide-gray-100">
+                  {pendingActions.map(action => (
+                    <div
+                      key={action.id}
+                      onClick={() => {
+                        if (action.type === 'bid_review') {
+                          navigate(`/invoices/${action.invoiceId}/bids`);
+                        } else {
+                          navigate(`/invoices/${action.invoiceId}`);
+                        }
+                      }}
+                      className="p-4 hover:bg-gray-50 transition cursor-pointer"
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center space-x-4">
+                          <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
+                            action.type === 'acceptance' ? 'bg-orange-100' :
+                            action.type === 'bid_review' ? 'bg-blue-100' :
+                            action.type === 'funding_choice' ? 'bg-purple-100' : 'bg-green-100'
+                          }`}>
+                            {action.type === 'acceptance' && <Clock size={18} className="text-orange-600" />}
+                            {action.type === 'bid_review' && <CreditCard size={18} className="text-blue-600" />}
+                            {action.type === 'funding_choice' && <CreditCard size={18} className="text-purple-600" />}
+                            {action.type === 'payment' && <CheckCircle size={18} className="text-green-600" />}
+                          </div>
+                          <div>
+                            <p className="font-medium text-gray-800">{action.seller}</p>
+                            <p className="text-sm text-gray-500">
+                              {action.type === 'acceptance' && `Pending seller acceptance • ${action.days} days to due`}
+                              {action.type === 'bid_review' && `${action.bids} bids received • Expires in ${action.expires}`}
+                              {action.type === 'funding_choice' && 'Seller accepted • Choose funding type'}
+                              {action.type === 'payment' && 'Ready to authorize payment'}
+                            </p>
+                          </div>
                         </div>
-                        <div>
-                          <p className="font-medium text-gray-800">{action.seller}</p>
-                          <p className="text-sm text-gray-500">
-                            {action.type === 'acceptance' && `Discount pending • ${action.days} days remaining`}
-                            {action.type === 'bid_review' && `${action.bids} bids received • Expires in ${action.expires}`}
-                            {action.type === 'payment' && 'Ready to authorize payment'}
-                          </p>
+                        <div className="flex items-center space-x-4">
+                          <span className="font-semibold text-gray-800">₹{action.amount}L</span>
+                          {action.urgent && (
+                            <span className="bg-red-100 text-red-700 text-xs px-2 py-1 rounded-full font-medium">Urgent</span>
+                          )}
+                          <ChevronRight size={20} className="text-gray-400" />
                         </div>
-                      </div>
-                      <div className="flex items-center space-x-4">
-                        <span className="font-semibold text-gray-800">₹{action.amount} L</span>
-                        {action.urgent && (
-                          <span className="bg-red-100 text-red-700 text-xs px-2 py-1 rounded-full font-medium">Urgent</span>
-                        )}
-                        <ChevronRight size={20} className="text-gray-400" />
                       </div>
                     </div>
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
+              )}
             </div>
 
             {/* Recent Payments */}
@@ -291,29 +466,36 @@ export default function BuyerDashboard() {
                 <h2 className="font-semibold text-gray-800">Recent Payments</h2>
                 <Link to="/invoices" className="text-blue-600 text-sm font-medium hover:text-blue-700">View All →</Link>
               </div>
-              <div className="p-4 space-y-4">
-                {recentPayments.map(payment => (
-                  <div key={payment.id} className="flex items-center space-x-3">
-                    <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
-                      payment.type === 'Self-Funded' ? 'bg-blue-100' : 'bg-purple-100'
-                    }`}>
-                      {payment.type === 'Self-Funded' ? (
-                        <Building2 size={16} className="text-blue-600" />
-                      ) : (
-                        <CreditCard size={16} className="text-purple-600" />
-                      )}
+              {recentPayments.length === 0 ? (
+                <div className="p-8 text-center text-gray-500">
+                  <IndianRupee size={32} className="mx-auto mb-2 text-gray-300" />
+                  <p>No payments yet</p>
+                </div>
+              ) : (
+                <div className="p-4 space-y-4">
+                  {recentPayments.map(payment => (
+                    <div key={payment.id} className="flex items-center space-x-3">
+                      <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
+                        payment.type === 'Self-Funded' ? 'bg-blue-100' : 'bg-purple-100'
+                      }`}>
+                        {payment.type === 'Self-Funded' ? (
+                          <Building2 size={16} className="text-blue-600" />
+                        ) : (
+                          <CreditCard size={16} className="text-purple-600" />
+                        )}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="font-medium text-gray-800 text-sm truncate">{payment.seller}</p>
+                        <p className="text-xs text-gray-500">{payment.date}</p>
+                      </div>
+                      <div className="text-right">
+                        <p className="font-semibold text-gray-800 text-sm">₹{payment.amount}L</p>
+                        <p className="text-xs text-green-600">{payment.type}</p>
+                      </div>
                     </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="font-medium text-gray-800 text-sm truncate">{payment.seller}</p>
-                      <p className="text-xs text-gray-500">{payment.date}</p>
-                    </div>
-                    <div className="text-right">
-                      <p className="font-semibold text-gray-800 text-sm">₹{payment.amount}L</p>
-                      <p className="text-xs text-green-600">{payment.type}</p>
-                    </div>
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         </main>

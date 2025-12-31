@@ -75,8 +75,10 @@ export class InvoiceService {
 
     if (entityType === 'BUYER') {
       buyerId = entityId;
-      // Try to find seller by GSTIN
-      if (data.sellerGstin) {
+      // Use provided sellerId first, or try to find seller by GSTIN
+      if (data.sellerId) {
+        sellerId = data.sellerId;
+      } else if (data.sellerGstin) {
         const seller = await prisma.seller.findUnique({ where: { gstin: data.sellerGstin } });
         sellerId = seller?.id || null;
       }
@@ -211,7 +213,7 @@ export class InvoiceService {
         include: {
           buyer: { select: { id: true, companyName: true } },
           seller: { select: { id: true, companyName: true } },
-          discountOffer: { select: { id: true, status: true, discountPercentage: true } },
+          discountOffer: { select: { id: true, status: true, discountPercentage: true, fundingType: true } },
           _count: { select: { bids: true } },
         },
         orderBy: { createdAt: 'desc' },

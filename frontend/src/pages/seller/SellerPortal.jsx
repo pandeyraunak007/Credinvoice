@@ -1,16 +1,19 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import {
-  Bell, TrendingUp, FileText, Clock, CheckCircle, XCircle,
+  TrendingUp, FileText, Clock, CheckCircle, XCircle,
   IndianRupee, Calendar, Building2, ChevronRight, AlertCircle,
   CreditCard, Wallet, History, HelpCircle, X, Loader2,
-  ThumbsUp, ThumbsDown, Timer, Percent, Info, Phone, Mail, Calculator
+  ThumbsUp, ThumbsDown, Timer, Percent, Info, Phone, Mail, Calculator, Settings, Bell
 } from 'lucide-react';
 import { discountService, invoiceService, disbursementService } from '../../services/api';
+import { useAuth } from '../../context/AuthContext';
+import NotificationDropdown from '../../components/NotificationDropdown';
 
 // ============ SELLER DASHBOARD ============
 export function SellerDashboard() {
   const navigate = useNavigate();
+  const { user, profile } = useAuth();
   const [loading, setLoading] = useState(true);
   const [pendingOffers, setPendingOffers] = useState([]);
   const [recentPayments, setRecentPayments] = useState([]);
@@ -22,6 +25,10 @@ export function SellerDashboard() {
     receivedThisMonth: 0,
     upcomingRepayments: 0
   });
+
+  const sellerInfo = profile?.seller || {};
+  const companyInitials = sellerInfo.companyName ? sellerInfo.companyName.substring(0, 2).toUpperCase() : 'SE';
+  const contactName = sellerInfo.contactName || user?.email?.split('@')[0] || 'User';
 
   const fetchData = async () => {
     try {
@@ -124,15 +131,22 @@ export function SellerDashboard() {
             <span className="ml-2 px-2 py-0.5 bg-green-100 text-green-700 text-xs rounded-full font-medium">Seller</span>
           </Link>
           <div className="flex items-center space-x-4">
-            <button className="relative p-2 text-gray-600 hover:bg-gray-100 rounded-lg">
-              <Bell size={20} />
-              <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white text-xs rounded-full flex items-center justify-center">3</span>
+            <NotificationDropdown />
+            <button
+              onClick={() => navigate('/account')}
+              className="p-2 text-gray-600 hover:bg-gray-100 rounded-lg"
+              title="Settings"
+            >
+              <Settings size={20} />
             </button>
-            <div className="flex items-center space-x-2">
+            <div
+              className="flex items-center space-x-2 cursor-pointer hover:bg-gray-100 px-2 py-1 rounded-lg"
+              onClick={() => navigate('/account')}
+            >
               <div className="w-8 h-8 bg-green-600 rounded-full flex items-center justify-center">
-                <span className="text-white text-sm font-medium">KT</span>
+                <span className="text-white text-sm font-medium">{companyInitials}</span>
               </div>
-              <span className="text-sm font-medium text-gray-700">Kumar Textiles</span>
+              <span className="text-sm font-medium text-gray-700">{sellerInfo.companyName || 'Seller'}</span>
             </div>
           </div>
         </div>
@@ -145,11 +159,13 @@ export function SellerDashboard() {
             <Link to="/seller" className="flex items-center space-x-3 px-3 py-2.5 bg-green-50 text-green-700 rounded-lg font-medium">
               <TrendingUp size={20} /><span>Dashboard</span>
             </Link>
-            <Link to="/seller/offers/1" className="flex items-center space-x-3 px-3 py-2.5 text-gray-700 hover:bg-gray-50 rounded-lg">
+            <Link to="/seller/discounts" className="flex items-center space-x-3 px-3 py-2.5 text-gray-700 hover:bg-gray-50 rounded-lg">
               <Percent size={20} /><span>Discount Offers</span>
-              <span className="ml-auto bg-orange-100 text-orange-700 text-xs px-2 py-0.5 rounded-full">3</span>
+              {stats.pendingOffers > 0 && (
+                <span className="ml-auto bg-orange-100 text-orange-700 text-xs px-2 py-0.5 rounded-full">{stats.pendingOffers}</span>
+              )}
             </Link>
-            <Link to="/seller" className="flex items-center space-x-3 px-3 py-2.5 text-gray-700 hover:bg-gray-50 rounded-lg">
+            <Link to="/seller/invoices" className="flex items-center space-x-3 px-3 py-2.5 text-gray-700 hover:bg-gray-50 rounded-lg">
               <FileText size={20} /><span>My Invoices</span>
             </Link>
             <Link to="/seller" className="flex items-center space-x-3 px-3 py-2.5 text-gray-700 hover:bg-gray-50 rounded-lg">
@@ -167,7 +183,7 @@ export function SellerDashboard() {
         {/* Main Content */}
         <main className="flex-1 p-6">
           <div className="mb-6">
-            <h1 className="text-2xl font-bold text-gray-800">Welcome back, Rajesh</h1>
+            <h1 className="text-2xl font-bold text-gray-800">Welcome back, {contactName}</h1>
             <p className="text-gray-500 text-sm">Here's your financing overview for today</p>
           </div>
 
@@ -317,6 +333,230 @@ export function SellerDashboard() {
               <HelpCircle size={20} /><span className="font-medium">Help & Support</span>
             </button>
           </div>
+        </main>
+      </div>
+    </div>
+  );
+}
+
+// ============ DISCOUNT OFFERS LIST PAGE ============
+export function DiscountOffersList() {
+  const navigate = useNavigate();
+  const { user, profile } = useAuth();
+  const [loading, setLoading] = useState(true);
+  const [offers, setOffers] = useState([]);
+  const [filter, setFilter] = useState('PENDING');
+
+  const sellerInfo = profile?.seller || {};
+  const companyInitials = sellerInfo.companyName ? sellerInfo.companyName.substring(0, 2).toUpperCase() : 'SE';
+
+  useEffect(() => {
+    const fetchOffers = async () => {
+      try {
+        setLoading(true);
+        const response = await discountService.getPending();
+        const data = response.data || [];
+        setOffers(data);
+      } catch (error) {
+        console.error('Failed to fetch offers:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchOffers();
+  }, [filter]);
+
+  const getStatusBadge = (status) => {
+    const styles = {
+      PENDING: 'bg-orange-100 text-orange-700',
+      ACCEPTED: 'bg-green-100 text-green-700',
+      REJECTED: 'bg-red-100 text-red-700',
+      CANCELLED: 'bg-gray-100 text-gray-700',
+    };
+    return styles[status] || styles.PENDING;
+  };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="flex items-center space-x-2 text-gray-600">
+          <Loader2 className="animate-spin" size={24} />
+          <span>Loading discount offers...</span>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-gray-50">
+      {/* Header */}
+      <nav className="bg-white border-b border-gray-200 px-6 py-3">
+        <div className="flex items-center justify-between">
+          <Link to="/seller" className="flex items-center space-x-2">
+            <div className="w-8 h-8 bg-red-600 rounded-lg flex items-center justify-center">
+              <span className="text-white font-bold text-sm">CI</span>
+            </div>
+            <span className="text-xl font-bold text-gray-800">CRED<span className="text-red-600">INVOICE</span></span>
+            <span className="ml-2 px-2 py-0.5 bg-green-100 text-green-700 text-xs rounded-full font-medium">Seller</span>
+          </Link>
+          <div className="flex items-center space-x-4">
+            <NotificationDropdown />
+            <button
+              onClick={() => navigate('/account')}
+              className="p-2 text-gray-600 hover:bg-gray-100 rounded-lg"
+              title="Settings"
+            >
+              <Settings size={20} />
+            </button>
+            <div
+              className="flex items-center space-x-2 cursor-pointer hover:bg-gray-100 px-2 py-1 rounded-lg"
+              onClick={() => navigate('/account')}
+            >
+              <div className="w-8 h-8 bg-green-600 rounded-full flex items-center justify-center">
+                <span className="text-white text-sm font-medium">{companyInitials}</span>
+              </div>
+              <span className="text-sm font-medium text-gray-700">{sellerInfo.companyName || 'Seller'}</span>
+            </div>
+          </div>
+        </div>
+      </nav>
+
+      <div className="flex">
+        {/* Sidebar */}
+        <aside className="w-64 bg-white border-r border-gray-200 min-h-screen p-4">
+          <nav className="space-y-1">
+            <Link to="/seller" className="flex items-center space-x-3 px-3 py-2.5 text-gray-700 hover:bg-gray-50 rounded-lg">
+              <TrendingUp size={20} /><span>Dashboard</span>
+            </Link>
+            <Link to="/seller/discounts" className="flex items-center space-x-3 px-3 py-2.5 bg-green-50 text-green-700 rounded-lg font-medium">
+              <Percent size={20} /><span>Discount Offers</span>
+              {offers.length > 0 && (
+                <span className="ml-auto bg-orange-100 text-orange-700 text-xs px-2 py-0.5 rounded-full">{offers.length}</span>
+              )}
+            </Link>
+            <Link to="/seller/invoices" className="flex items-center space-x-3 px-3 py-2.5 text-gray-700 hover:bg-gray-50 rounded-lg">
+              <FileText size={20} /><span>My Invoices</span>
+            </Link>
+            <Link to="/seller" className="flex items-center space-x-3 px-3 py-2.5 text-gray-700 hover:bg-gray-50 rounded-lg">
+              <CreditCard size={20} /><span>GST Financing</span>
+            </Link>
+            <Link to="/seller" className="flex items-center space-x-3 px-3 py-2.5 text-gray-700 hover:bg-gray-50 rounded-lg">
+              <Wallet size={20} /><span>Payments</span>
+            </Link>
+          </nav>
+        </aside>
+
+        {/* Main Content */}
+        <main className="flex-1 p-6">
+          <div className="mb-6">
+            <h1 className="text-2xl font-bold text-gray-800">Discount Offers</h1>
+            <p className="text-gray-500 text-sm">Review and respond to early payment discount offers from buyers</p>
+          </div>
+
+          {/* Filters */}
+          <div className="mb-6 flex items-center space-x-2">
+            {['PENDING', 'ACCEPTED', 'REJECTED'].map((status) => (
+              <button
+                key={status}
+                onClick={() => setFilter(status)}
+                className={`px-4 py-2 rounded-lg text-sm font-medium transition ${
+                  filter === status
+                    ? 'bg-green-600 text-white'
+                    : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'
+                }`}
+              >
+                {status.charAt(0) + status.slice(1).toLowerCase()}
+              </button>
+            ))}
+          </div>
+
+          {/* Offers List */}
+          {offers.length === 0 ? (
+            <div className="bg-white rounded-xl border border-gray-200 p-12 text-center">
+              <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <Percent size={32} className="text-gray-400" />
+              </div>
+              <h3 className="text-lg font-semibold text-gray-800 mb-2">No pending offers</h3>
+              <p className="text-gray-500">You don't have any discount offers waiting for your response.</p>
+            </div>
+          ) : (
+            <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+              <div className="divide-y divide-gray-100">
+                {offers.map((offer) => {
+                  const invoice = offer.invoice || {};
+                  const discountAmount = ((invoice.totalAmount || 0) * (offer.discountPercentage || 0)) / 100;
+                  const netAmount = (invoice.totalAmount || 0) - discountAmount;
+
+                  return (
+                    <div key={offer.id} className="p-5 hover:bg-gray-50 transition">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center space-x-4">
+                          <div className="w-14 h-14 bg-blue-100 rounded-xl flex items-center justify-center">
+                            <Building2 size={28} className="text-blue-600" />
+                          </div>
+                          <div>
+                            <p className="font-semibold text-gray-800 text-lg">{invoice.buyerName || 'Unknown Buyer'}</p>
+                            <p className="text-gray-500 text-sm">Invoice: {invoice.invoiceNumber || 'N/A'}</p>
+                            <div className="flex items-center space-x-2 mt-1">
+                              <span className={`text-xs px-2 py-0.5 rounded-full ${getStatusBadge(offer.status)}`}>
+                                {offer.status}
+                              </span>
+                              <span className="text-xs text-gray-400">
+                                Created: {new Date(offer.createdAt).toLocaleDateString('en-IN')}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="text-center px-6">
+                          <p className="text-sm text-gray-500">Invoice Amount</p>
+                          <p className="text-xl font-bold text-gray-800">
+                            ₹{(invoice.totalAmount || 0).toLocaleString('en-IN')}
+                          </p>
+                        </div>
+
+                        <div className="text-center px-6">
+                          <p className="text-sm text-gray-500">Discount</p>
+                          <p className="text-xl font-bold text-green-600">
+                            -{offer.discountPercentage}%
+                          </p>
+                        </div>
+
+                        <div className="text-center px-6">
+                          <p className="text-sm text-gray-500">You'll Receive</p>
+                          <p className="text-xl font-bold text-green-600">
+                            ₹{netAmount.toLocaleString('en-IN')}
+                          </p>
+                        </div>
+
+                        <div className="text-center px-6">
+                          <p className="text-sm text-gray-500">Early Payment</p>
+                          <p className="font-medium text-gray-800">
+                            {offer.earlyPaymentDate
+                              ? new Date(offer.earlyPaymentDate).toLocaleDateString('en-IN', {
+                                  day: 'numeric',
+                                  month: 'short'
+                                })
+                              : 'N/A'
+                            }
+                          </p>
+                        </div>
+
+                        <button
+                          onClick={() => navigate(`/seller/offers/${offer.id}`)}
+                          className="bg-green-600 text-white px-6 py-2.5 rounded-lg hover:bg-green-700 font-medium flex items-center space-x-2"
+                        >
+                          <span>Review</span>
+                          <ChevronRight size={16} />
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
         </main>
       </div>
     </div>

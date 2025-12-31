@@ -23,9 +23,10 @@ const RatingBadge = ({ rating }) => {
   );
 };
 
-const InvoiceCard = ({ invoice, onPlaceBid }) => {
+const InvoiceCard = ({ invoice, onPlaceBid, myBid }) => {
   const [expanded, setExpanded] = useState(false);
   const navigate = useNavigate();
+  const hasBid = !!myBid;
 
   return (
     <div className="bg-white rounded-xl border border-gray-200 overflow-hidden hover:shadow-md transition">
@@ -165,18 +166,25 @@ const InvoiceCard = ({ invoice, onPlaceBid }) => {
           <span className="font-semibold text-green-600">{invoice.estYield}% p.a.</span>
         </div>
         <div className="flex items-center space-x-3">
-          <button 
+          <button
             onClick={() => navigate(`/financier/marketplace/${invoice.invoiceId}`)}
             className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-100 text-sm font-medium"
           >
             View Full Details
           </button>
-          <button 
-            onClick={() => onPlaceBid(invoice)}
-            className="px-6 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 text-sm font-medium"
-          >
-            Place Bid
-          </button>
+          {hasBid ? (
+            <div className="flex items-center space-x-2 px-4 py-2 bg-green-100 text-green-700 rounded-lg text-sm font-medium">
+              <Check size={16} />
+              <span>Bid Placed: {myBid.discountRate}%</span>
+            </div>
+          ) : (
+            <button
+              onClick={() => onPlaceBid(invoice)}
+              className="px-6 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 text-sm font-medium"
+            >
+              Place Bid
+            </button>
+          )}
         </div>
       </div>
     </div>
@@ -287,10 +295,15 @@ export default function Marketplace() {
 
     setSubmittingBid(true);
     try {
+      // Set bid validity to 7 days from now
+      const validUntil = new Date();
+      validUntil.setDate(validUntil.getDate() + 7);
+
       await bidService.create({
         invoiceId: selectedInvoice.id,
         discountRate: parseFloat(bidData.rate),
         processingFee: parseFloat(bidData.processingFee || 0),
+        validUntil: validUntil.toISOString(),
       });
       setShowBidModal(false);
       // Refresh data
@@ -505,13 +518,18 @@ export default function Marketplace() {
               <p className="text-gray-500 text-sm mt-1">Check back later for new opportunities</p>
             </div>
           ) : (
-            filteredInvoices.map(invoice => (
-              <InvoiceCard
-                key={invoice.id}
-                invoice={invoice}
-                onPlaceBid={handlePlaceBid}
-              />
-            ))
+            filteredInvoices.map(invoice => {
+              // Find if user has already bid on this invoice
+              const existingBid = myBids.find(bid => bid.invoiceId === invoice.id);
+              return (
+                <InvoiceCard
+                  key={invoice.id}
+                  invoice={invoice}
+                  onPlaceBid={handlePlaceBid}
+                  myBid={existingBid}
+                />
+              );
+            })
           )}
         </div>
       </div>

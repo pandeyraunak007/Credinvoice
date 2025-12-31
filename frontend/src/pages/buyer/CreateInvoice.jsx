@@ -3,9 +3,9 @@ import { useNavigate } from 'react-router-dom';
 import {
   ArrowLeft, Plus, Trash2, Upload, FileText, Search, Building2, User,
   Calendar, IndianRupee, Package, Paperclip, CheckCircle, AlertCircle,
-  X, Loader2, ChevronDown, UserPlus, Send, Save, Info, Check
+  X, Loader2, ChevronDown, UserPlus, Send, Save, Info, Check, Percent, Zap
 } from 'lucide-react';
-import { invoiceService, profileService } from '../../services/api';
+import { invoiceService, profileService, discountService } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 
 // Form Section Component
@@ -484,6 +484,13 @@ export default function CreateInvoice() {
 
   const [attachments, setAttachments] = useState([]);
 
+  // Discount offer state
+  const [enableDiscount, setEnableDiscount] = useState(true);
+  const [discountOffer, setDiscountOffer] = useState({
+    discountPercentage: '2',
+    earlyPaymentDate: '',
+  });
+
   // Calculate totals from line items
   useEffect(() => {
     const subtotal = lineItems.reduce((sum, item) => sum + (parseFloat(item.amount) || 0), 0);
@@ -498,6 +505,32 @@ export default function CreateInvoice() {
       totalAmount: total.toFixed(2),
     }));
   }, [lineItems, amounts.cgst, amounts.sgst, amounts.igst]);
+
+  // Set default early payment date when due date changes
+  useEffect(() => {
+    if (invoiceData.dueDate && !discountOffer.earlyPaymentDate) {
+      // Default to 15 days before due date or 7 days from today, whichever is later
+      const dueDate = new Date(invoiceData.dueDate);
+      const defaultEarly = new Date(dueDate);
+      defaultEarly.setDate(defaultEarly.getDate() - 15);
+
+      const minDate = new Date();
+      minDate.setDate(minDate.getDate() + 7);
+
+      const earlyDate = defaultEarly > minDate ? defaultEarly : minDate;
+      setDiscountOffer(prev => ({
+        ...prev,
+        earlyPaymentDate: earlyDate.toISOString().split('T')[0]
+      }));
+    }
+  }, [invoiceData.dueDate]);
+
+  // Calculate discounted amount
+  const discountedAmount = useMemo(() => {
+    const total = parseFloat(amounts.totalAmount) || 0;
+    const discountPct = parseFloat(discountOffer.discountPercentage) || 0;
+    return total - (total * discountPct / 100);
+  }, [amounts.totalAmount, discountOffer.discountPercentage]);
 
   const handleAddLineItem = () => {
     setLineItems([...lineItems, { description: '', hsnCode: '', quantity: '', rate: '', amount: '0.00' }]);
@@ -555,6 +588,27 @@ export default function CreateInvoice() {
       }
     }
 
+    // Validate discount offer if enabled
+    if (enableDiscount) {
+      const discountPct = parseFloat(discountOffer.discountPercentage);
+      if (!discountPct || discountPct <= 0 || discountPct > 50) {
+        newErrors.discountPercentage = 'Discount must be between 0.1% and 50%';
+      }
+      if (!discountOffer.earlyPaymentDate) {
+        newErrors.earlyPaymentDate = 'Early payment date is required';
+      } else {
+        const earlyDate = new Date(discountOffer.earlyPaymentDate);
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        if (earlyDate <= today) {
+          newErrors.earlyPaymentDate = 'Early payment date must be in the future';
+        }
+        if (invoiceData.dueDate && earlyDate >= new Date(invoiceData.dueDate)) {
+          newErrors.earlyPaymentDate = 'Early payment date must be before due date';
+        }
+      }
+    }
+
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
@@ -572,6 +626,7 @@ export default function CreateInvoice() {
         dueDate: invoiceData.dueDate,
         sellerGstin: selectedSeller?.gstin || null,
         sellerName: selectedSeller?.companyName || '',
+        sellerId: selectedSeller?.id || null, // Direct seller ID for proper linking
         buyerGstin: buyerInfo.gstin || null,
         buyerName: buyerInfo.companyName || '',
         subtotal: parseFloat(amounts.subtotal) || 0,
@@ -580,10 +635,26 @@ export default function CreateInvoice() {
         productType: invoiceData.productType,
       };
 
+      // 1. Create the invoice
       const response = await invoiceService.create(data);
+      const invoiceId = response.data?.id;
 
-      if (!asDraft && response.data) {
-        await invoiceService.submit(response.data.id);
+      if (!invoiceId) {
+        throw new Error('Failed to create invoice - no ID returned');
+      }
+
+      // 2. Create discount offer if enabled and not draft
+      if (!asDraft && enableDiscount) {
+        try {
+          await discountService.createOffer({
+            invoiceId: invoiceId,
+            discountPercentage: parseFloat(discountOffer.discountPercentage),
+            earlyPaymentDate: discountOffer.earlyPaymentDate,
+          });
+        } catch (discountError) {
+          console.error('Failed to create discount offer:', discountError);
+          // Continue even if discount offer fails - invoice is created
+        }
       }
 
       navigate('/invoices');
@@ -848,6 +919,109 @@ export default function CreateInvoice() {
             </div>
           </FormSection>
 
+          {/* Discount Offer Section */}
+          <FormSection title="Early Payment Discount Offer" icon={Zap}>
+            <div className="space-y-6">
+              {/* Enable/Disable Toggle */}
+              <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
+                <div className="flex items-center space-x-3">
+                  <div className={`w-10 h-10 rounded-full flex items-center justify-center ${enableDiscount ? 'bg-green-100' : 'bg-gray-200'}`}>
+                    <Percent size={20} className={enableDiscount ? 'text-green-600' : 'text-gray-400'} />
+                  </div>
+                  <div>
+                    <p className="font-medium text-gray-800">Offer Early Payment Discount</p>
+                    <p className="text-sm text-gray-500">Incentivize the seller to accept early payment</p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setEnableDiscount(!enableDiscount)}
+                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                    enableDiscount ? 'bg-green-600' : 'bg-gray-300'
+                  }`}
+                >
+                  <span
+                    className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                      enableDiscount ? 'translate-x-6' : 'translate-x-1'
+                    }`}
+                  />
+                </button>
+              </div>
+
+              {enableDiscount && (
+                <>
+                  <div className="grid grid-cols-2 gap-6">
+                    <FormField label="Discount Percentage" required error={errors.discountPercentage}>
+                      <div className="relative">
+                        <input
+                          type="number"
+                          step="0.1"
+                          min="0.1"
+                          max="50"
+                          value={discountOffer.discountPercentage}
+                          onChange={(e) => setDiscountOffer({ ...discountOffer, discountPercentage: e.target.value })}
+                          placeholder="2.0"
+                          className={`w-full px-4 py-2.5 pr-10 border rounded-lg focus:ring-2 focus:ring-blue-500 ${
+                            errors.discountPercentage ? 'border-red-300' : 'border-gray-300'
+                          }`}
+                        />
+                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500">%</span>
+                      </div>
+                    </FormField>
+
+                    <FormField label="Early Payment Date" required error={errors.earlyPaymentDate} hint="Date by which payment will be made">
+                      <div className="relative">
+                        <Calendar size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                        <input
+                          type="date"
+                          value={discountOffer.earlyPaymentDate}
+                          onChange={(e) => setDiscountOffer({ ...discountOffer, earlyPaymentDate: e.target.value })}
+                          min={new Date(Date.now() + 86400000).toISOString().split('T')[0]}
+                          max={invoiceData.dueDate}
+                          className={`w-full pl-10 pr-4 py-2.5 border rounded-lg focus:ring-2 focus:ring-blue-500 ${
+                            errors.earlyPaymentDate ? 'border-red-300' : 'border-gray-300'
+                          }`}
+                        />
+                      </div>
+                    </FormField>
+                  </div>
+
+                  {/* Discount Summary */}
+                  {parseFloat(amounts.totalAmount) > 0 && (
+                    <div className="bg-green-50 border border-green-200 rounded-xl p-4">
+                      <div className="flex items-start justify-between">
+                        <div>
+                          <p className="text-sm text-green-600 font-medium mb-1">Discount Offer Summary</p>
+                          <p className="text-xs text-green-600">
+                            Seller receives early payment by {discountOffer.earlyPaymentDate ? new Date(discountOffer.earlyPaymentDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : 'TBD'}
+                          </p>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-sm text-gray-600">
+                            <span className="line-through">₹{parseFloat(amounts.totalAmount).toLocaleString('en-IN')}</span>
+                          </p>
+                          <p className="text-xl font-bold text-green-700">
+                            ₹{discountedAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                          </p>
+                          <p className="text-xs text-green-600">
+                            Save ₹{(parseFloat(amounts.totalAmount) - discountedAmount).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="flex items-start space-x-2 text-sm text-gray-600 bg-blue-50 p-3 rounded-lg">
+                    <Info size={16} className="text-blue-500 flex-shrink-0 mt-0.5" />
+                    <p>
+                      This discount offer will be sent to the seller for acceptance. Once accepted, you'll choose the funding type (self-funded or financier-funded).
+                    </p>
+                  </div>
+                </>
+              )}
+            </div>
+          </FormSection>
+
           {/* Attachments Section */}
           <FormSection title="Attachments" icon={Paperclip}>
             <div className="border-2 border-dashed border-gray-300 rounded-xl p-6 text-center hover:border-gray-400 transition">
@@ -930,7 +1104,7 @@ export default function CreateInvoice() {
               ) : (
                 <>
                   <Send size={18} />
-                  <span>Submit Invoice</span>
+                  <span>{enableDiscount ? 'Submit with Discount Offer' : 'Submit Invoice'}</span>
                 </>
               )}
             </button>

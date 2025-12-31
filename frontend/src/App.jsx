@@ -15,7 +15,7 @@ import BidReviewPage from './pages/buyer/BidReview';
 import BuyerAnalytics from './pages/buyer/Analytics';
 
 // Import Seller pages
-import { SellerDashboard, OfferDetailPage } from './pages/seller/SellerPortal';
+import { SellerDashboard, OfferDetailPage, DiscountOffersList } from './pages/seller/SellerPortal';
 
 // Import Financier pages
 import FinancierDashboard from './pages/financier/Dashboard';
@@ -30,6 +30,10 @@ import KYCStatus from './pages/kyc/KYCStatus';
 // Import Admin pages
 import AdminKYCQueue from './pages/admin/KYCQueue';
 import KYCReviewDetail from './pages/admin/KYCReviewDetail';
+
+// Import Shared pages
+import Account from './components/Account';
+import Notifications from './components/Notifications';
 
 // Loading Spinner Component
 function LoadingSpinner() {
@@ -243,6 +247,14 @@ function AppRoutes() {
         }
       />
       <Route
+        path="/seller/discounts"
+        element={
+          <ProtectedRoute allowedRoles={['SELLER']}>
+            <DiscountOffersList />
+          </ProtectedRoute>
+        }
+      />
+      <Route
         path="/seller/offers/:id"
         element={
           <ProtectedRoute allowedRoles={['SELLER']}>
@@ -331,6 +343,24 @@ function AppRoutes() {
         element={
           <ProtectedRoute allowedRoles={['ADMIN']} requireKYC={false}>
             <KYCReviewDetail />
+          </ProtectedRoute>
+        }
+      />
+
+      {/* Shared Routes - Account & Notifications */}
+      <Route
+        path="/account"
+        element={
+          <ProtectedRoute allowedRoles={['BUYER', 'SELLER', 'FINANCIER']}>
+            <Account />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/notifications"
+        element={
+          <ProtectedRoute allowedRoles={['BUYER', 'SELLER', 'FINANCIER']}>
+            <Notifications />
           </ProtectedRoute>
         }
       />

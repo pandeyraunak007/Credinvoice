@@ -5,6 +5,7 @@ import {
   CreateDiscountOfferInput,
   UpdateDiscountOfferInput,
   RespondDiscountOfferInput,
+  SelectFundingTypeInput,
   ListDiscountOffersQuery,
 } from './discount.validation';
 
@@ -44,7 +45,7 @@ export class DiscountService {
     const discountAmount = invoice.totalAmount * (data.discountPercentage / 100);
     const discountedAmount = invoice.totalAmount - discountAmount;
 
-    // Create discount offer
+    // Create discount offer (fundingType is optional - buyer selects after seller accepts)
     const discountOffer = await prisma.$transaction(async (tx) => {
       const offer = await tx.discountOffer.create({
         data: {
@@ -53,7 +54,7 @@ export class DiscountService {
           discountPercentage: data.discountPercentage,
           discountedAmount,
           earlyPaymentDate: data.earlyPaymentDate,
-          fundingType: data.fundingType as FundingType,
+          fundingType: data.fundingType ? (data.fundingType as FundingType) : null,
           status: 'PENDING',
         },
       });
@@ -256,9 +257,9 @@ export class DiscountService {
     }
 
     const newStatus = input.action === 'ACCEPT' ? 'ACCEPTED' : 'REJECTED';
-    const newInvoiceStatus = input.action === 'ACCEPT'
-      ? (offer.fundingType === 'SELF_FUNDED' ? 'ACCEPTED' : 'OPEN_FOR_BIDDING')
-      : 'REJECTED';
+    // When seller accepts, invoice goes to ACCEPTED status
+    // Buyer will then select funding type which will determine next step
+    const newInvoiceStatus = input.action === 'ACCEPT' ? 'ACCEPTED' : 'REJECTED';
 
     const updated = await prisma.$transaction(async (tx) => {
       const updatedOffer = await tx.discountOffer.update({
@@ -266,6 +267,64 @@ export class DiscountService {
         data: {
           status: newStatus as DiscountOfferStatus,
           respondedAt: new Date(),
+        },
+      });
+
+      await tx.invoice.update({
+        where: { id: offer.invoiceId },
+        data: { status: newInvoiceStatus as InvoiceStatus },
+      });
+
+      return updatedOffer;
+    });
+
+    return updated;
+  }
+
+  // Buyer selects funding type after seller accepts the offer
+  async selectFundingType(
+    offerId: string,
+    buyerUserId: string,
+    input: SelectFundingTypeInput
+  ) {
+    const buyer = await prisma.buyer.findUnique({ where: { userId: buyerUserId } });
+    if (!buyer) throw new AppError('Buyer profile not found', 404);
+
+    const offer = await prisma.discountOffer.findUnique({
+      where: { id: offerId },
+      include: { invoice: true },
+    });
+
+    if (!offer) {
+      throw new AppError('Discount offer not found', 404);
+    }
+
+    if (offer.buyerId !== buyer.id) {
+      throw new AppError('You can only select funding type for your own offers', 403);
+    }
+
+    if (offer.status !== 'ACCEPTED') {
+      throw new AppError('Can only select funding type for accepted offers', 400);
+    }
+
+    if (offer.invoice.status !== 'ACCEPTED') {
+      throw new AppError('Invoice must be in ACCEPTED status', 400);
+    }
+
+    // If funding type already set and invoice has progressed, don't allow change
+    if (offer.fundingType && offer.invoice.status !== 'ACCEPTED') {
+      throw new AppError('Funding type has already been selected and cannot be changed', 400);
+    }
+
+    const newInvoiceStatus = input.fundingType === 'SELF_FUNDED'
+      ? 'ACCEPTED'  // Stay at ACCEPTED, buyer will authorize payment
+      : 'OPEN_FOR_BIDDING';  // Open for financiers to bid
+
+    const updated = await prisma.$transaction(async (tx) => {
+      const updatedOffer = await tx.discountOffer.update({
+        where: { id: offerId },
+        data: {
+          fundingType: input.fundingType as FundingType,
         },
       });
 

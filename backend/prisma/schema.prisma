@@ -304,7 +304,7 @@ model DiscountOffer {
   discountPercentage Float               @map("discount_percentage")
   discountedAmount   Float               @map("discounted_amount")
   earlyPaymentDate   DateTime            @map("early_payment_date")
-  fundingType        FundingType         @map("funding_type")
+  fundingType        FundingType?        @map("funding_type")
   status             DiscountOfferStatus @default(PENDING)
   respondedAt        DateTime?           @map("responded_at")
   createdAt          DateTime            @default(now()) @map("created_at")

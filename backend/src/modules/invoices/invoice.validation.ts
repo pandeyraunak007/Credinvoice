@@ -23,6 +23,7 @@ export const createInvoiceSchema = z.object({
   dueDate: z.string().transform((str) => new Date(str)),
   sellerGstin: z.string().regex(gstinRegex, 'Invalid seller GSTIN').optional().nullable(),
   sellerName: z.string().min(1, 'Seller name is required'),
+  sellerId: z.string().uuid().optional().nullable(), // Direct seller ID for proper linking
   buyerGstin: z.string().regex(gstinRegex, 'Invalid buyer GSTIN').optional().nullable(),
   buyerName: z.string().min(1, 'Buyer name is required'),
   subtotal: z.number().positive('Subtotal must be positive'),
