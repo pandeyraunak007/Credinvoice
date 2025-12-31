@@ -35,7 +35,7 @@ jobs:
             
             echo "📦 Updating backend..."
             cd backend
-            npm ci --production
+            npm ci
             npm run build
             npx prisma generate
             npx prisma db push --skip-generate
