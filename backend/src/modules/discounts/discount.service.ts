@@ -1,6 +1,7 @@
 import { DiscountOfferStatus, FundingType, InvoiceStatus } from '@prisma/client';
 import { prisma } from '../../config/database';
 import { AppError } from '../../middleware/errorHandler';
+import { emailService } from '../../services/email.service';
 import {
   CreateDiscountOfferInput,
   UpdateDiscountOfferInput,
@@ -67,6 +68,26 @@ export class DiscountService {
 
       return offer;
     });
+
+    // Send email notification to seller (async, don't wait)
+    if (invoice.sellerId) {
+      const seller = await prisma.seller.findUnique({
+        where: { id: invoice.sellerId },
+        include: { user: { select: { email: true } } },
+      });
+
+      if (seller?.user?.email) {
+        emailService.sendDiscountOfferReceived(seller.user.email, {
+          sellerName: seller.companyName || 'Seller',
+          buyerName: buyer.companyName || 'Buyer',
+          invoiceNumber: invoice.invoiceNumber,
+          originalAmount: invoice.totalAmount,
+          discountedAmount,
+          discountPercentage: data.discountPercentage,
+          expiresAt: data.earlyPaymentDate,
+        }).catch(err => console.error('Failed to send discount offer email:', err));
+      }
+    }
 
     return discountOffer;
   }
@@ -277,6 +298,30 @@ export class DiscountService {
 
       return updatedOffer;
     });
+
+    // Send email notification to buyer (async, don't wait)
+    const buyerWithUser = await prisma.buyer.findUnique({
+      where: { id: offer.buyerId },
+      include: { user: { select: { email: true } } },
+    });
+
+    if (buyerWithUser?.user?.email) {
+      if (input.action === 'ACCEPT') {
+        emailService.sendDiscountOfferAccepted(buyerWithUser.user.email, {
+          buyerName: buyerWithUser.companyName || 'Buyer',
+          sellerName: seller.companyName || 'Seller',
+          invoiceNumber: offer.invoice.invoiceNumber,
+          discountedAmount: offer.discountedAmount,
+        }).catch(err => console.error('Failed to send offer accepted email:', err));
+      } else {
+        emailService.sendDiscountOfferRejected(buyerWithUser.user.email, {
+          buyerName: buyerWithUser.companyName || 'Buyer',
+          sellerName: seller.companyName || 'Seller',
+          invoiceNumber: offer.invoice.invoiceNumber,
+          reason: input.rejectionReason,
+        }).catch(err => console.error('Failed to send offer rejected email:', err));
+      }
+    }
 
     return updated;
   }

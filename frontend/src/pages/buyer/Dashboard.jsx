@@ -18,11 +18,13 @@ export default function BuyerDashboard() {
   const [invoices, setInvoices] = useState([]);
   const [discountOffers, setDiscountOffers] = useState([]);
   const [disbursements, setDisbursements] = useState([]);
+  const [repayments, setRepayments] = useState([]);
   const [kpis, setKpis] = useState({
     activeInvoices: 0,
     totalUpcoming: 0,
     discountsCaptured: 0,
-    pendingActions: 0
+    pendingActions: 0,
+    upcomingRepayments: 0
   });
 
   const buyerInfo = profile?.buyer || {};
@@ -37,19 +39,22 @@ export default function BuyerDashboard() {
       setLoading(true);
 
       // Fetch all data in parallel
-      const [invoicesRes, offersRes, disbursementsRes] = await Promise.all([
+      const [invoicesRes, offersRes, disbursementsRes, repaymentsRes] = await Promise.all([
         invoiceService.list(),
         discountService.getMyOffers().catch(() => ({ data: [] })),
         disbursementService.list().catch(() => ({ data: [] })),
+        disbursementService.getUpcomingRepayments().catch(() => ({ data: [] })),
       ]);
 
       const invoiceData = invoicesRes.data?.invoices || invoicesRes.data || [];
       const offersData = offersRes.data || [];
       const disbursementData = disbursementsRes.data || [];
+      const repaymentData = repaymentsRes.data?.repayments || repaymentsRes.data || [];
 
       setInvoices(invoiceData);
       setDiscountOffers(offersData);
       setDisbursements(disbursementData);
+      setRepayments(repaymentData);
 
       // Calculate KPIs from real data
       const activeCount = invoiceData.filter(inv =>
@@ -71,11 +76,17 @@ export default function BuyerDashboard() {
         ['PENDING_ACCEPTANCE', 'OPEN_FOR_BIDDING', 'ACCEPTED'].includes(inv.status)
       ).length;
 
+      // Calculate upcoming repayments total
+      const upcomingRepaymentTotal = repaymentData
+        .filter(r => r.status === 'PENDING')
+        .reduce((sum, r) => sum + (r.amount || 0), 0);
+
       setKpis({
         activeInvoices: activeCount,
         totalUpcoming: (upcomingPayments / 10000000).toFixed(2), // In Crores
         discountsCaptured: (discountSavings / 100000).toFixed(1), // In Lakhs
-        pendingActions: pendingCount
+        pendingActions: pendingCount,
+        upcomingRepayments: (upcomingRepaymentTotal / 100000).toFixed(1) // In Lakhs
       });
 
     } catch (error) {
@@ -148,6 +159,27 @@ export default function BuyerDashboard() {
       }),
       type: d.payerType === 'BUYER' ? 'Self-Funded' : 'Financier'
     }));
+
+  // Build upcoming repayments list
+  const upcomingRepaymentsList = repayments
+    .filter(r => r.status === 'PENDING' || r.status === 'OVERDUE')
+    .slice(0, 5)
+    .map(r => {
+      const dueDate = new Date(r.dueDate);
+      const today = new Date();
+      const daysLeft = Math.ceil((dueDate - today) / (1000 * 60 * 60 * 24));
+      return {
+        id: r.id,
+        invoiceId: r.disbursement?.invoice?.id,
+        invoiceNumber: r.disbursement?.invoice?.invoiceNumber || 'N/A',
+        financier: r.disbursement?.financier?.companyName || 'Unknown Financier',
+        amount: ((r.amount || 0) / 100000).toFixed(1),
+        dueDate: dueDate.toLocaleDateString('en-IN', { month: 'short', day: 'numeric' }),
+        daysLeft: daysLeft,
+        status: r.status,
+        isOverdue: daysLeft < 0 || r.status === 'OVERDUE'
+      };
+    });
 
   // Build alerts from real data
   const urgentAlerts = [];
@@ -498,6 +530,81 @@ export default function BuyerDashboard() {
               )}
             </div>
           </div>
+
+          {/* Upcoming Repayments Section */}
+          {upcomingRepaymentsList.length > 0 && (
+            <div className="mt-6 bg-white rounded-xl border border-gray-200 shadow-sm">
+              <div className="flex items-center justify-between p-5 border-b border-gray-100">
+                <div className="flex items-center space-x-3">
+                  <div className="w-10 h-10 bg-orange-100 rounded-lg flex items-center justify-center">
+                    <Clock size={18} className="text-orange-600" />
+                  </div>
+                  <div>
+                    <h2 className="font-semibold text-gray-800">Upcoming Repayments</h2>
+                    <p className="text-sm text-gray-500">Financier-funded invoices to be repaid</p>
+                  </div>
+                </div>
+                {parseFloat(kpis.upcomingRepayments) > 0 && (
+                  <div className="text-right">
+                    <p className="text-sm text-gray-500">Total Due</p>
+                    <p className="text-xl font-bold text-orange-600">₹{kpis.upcomingRepayments}L</p>
+                  </div>
+                )}
+              </div>
+              <div className="divide-y divide-gray-100">
+                {upcomingRepaymentsList.map(repayment => (
+                  <div
+                    key={repayment.id}
+                    onClick={() => repayment.invoiceId && navigate(`/invoices/${repayment.invoiceId}`)}
+                    className={`p-4 hover:bg-gray-50 transition cursor-pointer ${
+                      repayment.isOverdue ? 'bg-red-50' : ''
+                    }`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center space-x-4">
+                        <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
+                          repayment.isOverdue ? 'bg-red-100' : 'bg-orange-100'
+                        }`}>
+                          {repayment.isOverdue ? (
+                            <AlertCircle size={18} className="text-red-600" />
+                          ) : (
+                            <Clock size={18} className="text-orange-600" />
+                          )}
+                        </div>
+                        <div>
+                          <p className="font-medium text-gray-800">{repayment.invoiceNumber}</p>
+                          <p className="text-sm text-gray-500">
+                            To: {repayment.financier}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex items-center space-x-4">
+                        <div className="text-right">
+                          <p className="font-semibold text-gray-800">₹{repayment.amount}L</p>
+                          <p className={`text-sm ${repayment.isOverdue ? 'text-red-600 font-medium' : 'text-gray-500'}`}>
+                            {repayment.isOverdue
+                              ? `${Math.abs(repayment.daysLeft)} days overdue`
+                              : `Due: ${repayment.dueDate}`}
+                          </p>
+                        </div>
+                        {repayment.isOverdue && (
+                          <span className="bg-red-100 text-red-700 text-xs px-2 py-1 rounded-full font-medium">
+                            Overdue
+                          </span>
+                        )}
+                        {!repayment.isOverdue && repayment.daysLeft <= 3 && (
+                          <span className="bg-orange-100 text-orange-700 text-xs px-2 py-1 rounded-full font-medium">
+                            Due Soon
+                          </span>
+                        )}
+                        <ChevronRight size={20} className="text-gray-400" />
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </main>
       </div>
     </div>

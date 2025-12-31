@@ -1,6 +1,7 @@
 import { DisbursementStatus, RepaymentStatus, EntityType } from '@prisma/client';
 import { prisma } from '../../config/database';
 import { AppError } from '../../middleware/errorHandler';
+import { emailService } from '../../services/email.service';
 import {
   InitiateDisbursementInput,
   InitiateFinancierDisbursementInput,
@@ -221,7 +222,35 @@ export class DisbursementService {
     const updated = await prisma.disbursement.update({
       where: { id: disbursementId },
       data: updateData,
+      include: {
+        invoice: {
+          include: {
+            seller: { include: { user: { select: { email: true } } } },
+            buyer: { include: { user: { select: { email: true } } } },
+          },
+        },
+      },
     });
+
+    // Send payment notification to seller when disbursement is completed
+    if (data.status === 'COMPLETED') {
+      const seller = updated.invoice.seller;
+      if (seller?.user?.email) {
+        // Get financier name if applicable
+        let payerName = updated.invoice.buyer?.companyName || 'Buyer';
+        if (updated.financierId) {
+          const fin = await prisma.financier.findUnique({ where: { id: updated.financierId } });
+          payerName = fin?.companyName || 'Financier';
+        }
+
+        emailService.sendPaymentDisbursed(seller.user.email, {
+          recipientName: seller.companyName || 'Seller',
+          invoiceNumber: updated.invoice.invoiceNumber,
+          amount: updated.amount,
+          payerName,
+        }).catch(err => console.error('Failed to send payment notification email:', err));
+      }
+    }
 
     return updated;
   }

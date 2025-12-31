@@ -3,9 +3,10 @@ import { Link, useNavigate } from 'react-router-dom';
 import {
   ArrowLeft, Search, Filter, Building2, Calendar, Clock, CheckCircle,
   TrendingUp, AlertCircle, IndianRupee, Briefcase, Download, Eye,
-  ChevronRight, BarChart3, PieChart, Loader2, RefreshCw
+  ChevronRight, BarChart3, PieChart, Loader2, RefreshCw, X, Send,
+  BanknoteIcon, Shield, Wallet
 } from 'lucide-react';
-import { bidService, disbursementService } from '../../services/api';
+import { bidService, disbursementService, profileService } from '../../services/api';
 
 const StatusBadge = ({ status }) => {
   const config = {
@@ -16,6 +17,323 @@ const StatusBadge = ({ status }) => {
   };
   const { label, color } = config[status] || config.disbursed;
   return <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${color}`}>{label}</span>;
+};
+
+// Process Disbursement Modal
+const ProcessDisbursementModal = ({ isOpen, onClose, investment, onProcess, isLoading }) => {
+  const [bankAccounts, setBankAccounts] = useState([]);
+  const [selectedAccount, setSelectedAccount] = useState(null);
+  const [loadingAccounts, setLoadingAccounts] = useState(true);
+  const [step, setStep] = useState(1); // 1: Review, 2: Confirm
+
+  useEffect(() => {
+    if (isOpen) {
+      fetchBankAccounts();
+      setStep(1);
+      setSelectedAccount(null);
+    }
+  }, [isOpen]);
+
+  const fetchBankAccounts = async () => {
+    try {
+      setLoadingAccounts(true);
+      const response = await profileService.getBankAccounts();
+      setBankAccounts(response.data || []);
+      const primary = (response.data || []).find(acc => acc.isPrimary);
+      if (primary) setSelectedAccount(primary.id);
+    } catch (err) {
+      console.error('Failed to fetch bank accounts:', err);
+    } finally {
+      setLoadingAccounts(false);
+    }
+  };
+
+  if (!isOpen || !investment) return null;
+
+  const disbursementAmount = investment.disbursedAmount || investment.amount;
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+      <div className="bg-white rounded-2xl max-w-lg w-full mx-4 overflow-hidden shadow-2xl">
+        {/* Header */}
+        <div className="px-6 py-4 border-b border-gray-200 bg-gradient-to-r from-purple-50 to-blue-50">
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="text-lg font-semibold text-gray-800">
+                {step === 1 ? 'Process Disbursement' : 'Confirm Disbursement'}
+              </h3>
+              <p className="text-sm text-gray-500">Invoice: {investment.invoiceId}</p>
+            </div>
+            <button onClick={onClose} className="p-1 hover:bg-gray-100 rounded-lg">
+              <X size={20} className="text-gray-500" />
+            </button>
+          </div>
+        </div>
+
+        <div className="p-6">
+          {step === 1 ? (
+            <>
+              {/* Disbursement Summary */}
+              <div className="bg-purple-50 border border-purple-200 rounded-xl p-4 mb-6">
+                <div className="flex items-center justify-between mb-3">
+                  <span className="text-gray-600">Invoice Amount</span>
+                  <span className="font-medium">₹{(investment.amount / 100000).toFixed(2)}L</span>
+                </div>
+                <div className="flex items-center justify-between mb-3 text-green-600">
+                  <span>Your Discount Rate</span>
+                  <span className="font-semibold">{investment.myRate}%</span>
+                </div>
+                <div className="border-t border-purple-200 pt-3 flex items-center justify-between">
+                  <span className="font-semibold text-gray-800">Amount to Disburse</span>
+                  <span className="text-xl font-bold text-purple-600">₹{(disbursementAmount / 100000).toFixed(2)}L</span>
+                </div>
+              </div>
+
+              {/* Seller Info */}
+              <div className="bg-gray-50 rounded-lg p-3 mb-6">
+                <p className="text-sm text-gray-500 mb-1">Disbursement to</p>
+                <p className="font-medium text-gray-800">{investment.seller}</p>
+                <p className="text-sm text-gray-500">Buyer: {investment.buyer}</p>
+              </div>
+
+              {/* Bank Account Selection */}
+              <div className="mb-6">
+                <label className="block text-sm font-medium text-gray-700 mb-3">
+                  Select Source Account
+                </label>
+                {loadingAccounts ? (
+                  <div className="flex items-center justify-center py-8">
+                    <Loader2 className="animate-spin text-gray-400" size={24} />
+                  </div>
+                ) : bankAccounts.length === 0 ? (
+                  <div className="text-center py-6 bg-gray-50 rounded-lg">
+                    <Wallet size={32} className="mx-auto text-gray-300 mb-2" />
+                    <p className="text-gray-600 font-medium">No bank accounts found</p>
+                    <p className="text-sm text-gray-500">Add a bank account to process disbursements</p>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {bankAccounts.map((account) => (
+                      <label
+                        key={account.id}
+                        className={`flex items-center p-3 border-2 rounded-xl cursor-pointer transition ${
+                          selectedAccount === account.id
+                            ? 'border-purple-500 bg-purple-50'
+                            : 'border-gray-200 hover:border-gray-300'
+                        }`}
+                      >
+                        <input
+                          type="radio"
+                          name="bankAccount"
+                          value={account.id}
+                          checked={selectedAccount === account.id}
+                          onChange={() => setSelectedAccount(account.id)}
+                          className="sr-only"
+                        />
+                        <div className="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center mr-3">
+                          <BanknoteIcon size={20} className="text-purple-600" />
+                        </div>
+                        <div className="flex-1">
+                          <div className="flex items-center space-x-2">
+                            <p className="font-medium text-gray-800">{account.bankName}</p>
+                            {account.isPrimary && (
+                              <span className="px-2 py-0.5 bg-green-100 text-green-700 text-xs rounded-full">Primary</span>
+                            )}
+                          </div>
+                          <p className="text-sm text-gray-500">
+                            A/C: ****{account.accountNumber?.slice(-4)} • {account.ifscCode}
+                          </p>
+                        </div>
+                        {selectedAccount === account.id && (
+                          <CheckCircle size={20} className="text-purple-600" />
+                        )}
+                      </label>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Expected Returns */}
+              <div className="bg-green-50 border border-green-200 rounded-lg p-3 mb-6">
+                <div className="flex items-center space-x-2 text-green-700">
+                  <TrendingUp size={16} />
+                  <span className="text-sm font-medium">
+                    Expected Return: ₹{(investment.expectedReturn / 1000).toFixed(1)}K on {investment.dueDate}
+                  </span>
+                </div>
+              </div>
+            </>
+          ) : (
+            <>
+              {/* Confirmation Step */}
+              <div className="text-center mb-6">
+                <div className="w-16 h-16 bg-purple-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <Send size={32} className="text-purple-600" />
+                </div>
+                <h4 className="text-lg font-semibold text-gray-800 mb-2">Confirm Fund Transfer</h4>
+                <p className="text-gray-600">You are about to disburse</p>
+                <p className="text-3xl font-bold text-gray-800 my-3">₹{(disbursementAmount / 100000).toFixed(2)}L</p>
+                <p className="text-gray-600">to {investment.seller}</p>
+              </div>
+
+              <div className="bg-gray-50 rounded-xl p-4 mb-6 space-y-3">
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-500">Invoice</span>
+                  <span className="font-medium">{investment.invoiceId}</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-500">Your Rate</span>
+                  <span className="font-medium text-green-600">{investment.myRate}%</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-500">Repayment Due</span>
+                  <span className="font-medium">{investment.dueDate}</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-500">From Account</span>
+                  <span className="font-medium">
+                    {bankAccounts.find(a => a.id === selectedAccount)?.bankName} ****
+                    {bankAccounts.find(a => a.id === selectedAccount)?.accountNumber?.slice(-4)}
+                  </span>
+                </div>
+              </div>
+
+              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 mb-6">
+                <div className="flex items-start space-x-2">
+                  <AlertCircle size={16} className="text-yellow-600 mt-0.5" />
+                  <p className="text-sm text-yellow-800">
+                    By confirming, you authorize the transfer of funds to the seller's bank account.
+                    The buyer will repay you by the due date.
+                  </p>
+                </div>
+              </div>
+            </>
+          )}
+
+          {/* Actions */}
+          <div className="flex items-center space-x-3">
+            {step === 2 && (
+              <button
+                onClick={() => setStep(1)}
+                disabled={isLoading}
+                className="flex-1 px-4 py-2.5 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 font-medium disabled:opacity-50"
+              >
+                Back
+              </button>
+            )}
+            <button
+              onClick={onClose}
+              disabled={isLoading}
+              className={`${step === 1 ? 'flex-1' : ''} px-4 py-2.5 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 font-medium disabled:opacity-50`}
+            >
+              Cancel
+            </button>
+            <button
+              onClick={() => {
+                if (step === 1 && selectedAccount) {
+                  setStep(2);
+                } else if (step === 2) {
+                  onProcess(investment, selectedAccount);
+                }
+              }}
+              disabled={isLoading || (step === 1 && !selectedAccount)}
+              className="flex-1 px-6 py-2.5 bg-purple-600 text-white rounded-lg hover:bg-purple-700 font-medium disabled:opacity-50 flex items-center justify-center space-x-2"
+            >
+              {isLoading ? (
+                <>
+                  <Loader2 size={18} className="animate-spin" />
+                  <span>Processing...</span>
+                </>
+              ) : step === 1 ? (
+                <span>Continue</span>
+              ) : (
+                <>
+                  <Send size={18} />
+                  <span>Process Disbursement</span>
+                </>
+              )}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// Mark Completed Modal
+const MarkCompletedModal = ({ isOpen, onClose, investment, onMarkCompleted, isLoading }) => {
+  const [reference, setReference] = useState('');
+
+  if (!isOpen || !investment) return null;
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+      <div className="bg-white rounded-2xl max-w-md w-full mx-4 overflow-hidden shadow-2xl">
+        <div className="px-6 py-4 border-b border-gray-200">
+          <div className="flex items-center justify-between">
+            <h3 className="text-lg font-semibold text-gray-800">Mark Disbursement Completed</h3>
+            <button onClick={onClose} className="p-1 hover:bg-gray-100 rounded-lg">
+              <X size={20} className="text-gray-500" />
+            </button>
+          </div>
+        </div>
+
+        <div className="p-6">
+          <div className="bg-green-50 rounded-xl p-4 mb-6">
+            <div className="flex items-center space-x-3">
+              <div className="w-12 h-12 bg-green-100 rounded-full flex items-center justify-center">
+                <CheckCircle size={24} className="text-green-600" />
+              </div>
+              <div>
+                <p className="font-semibold text-gray-800">{investment.invoiceId}</p>
+                <p className="text-sm text-gray-600">₹{(investment.disbursedAmount / 100000).toFixed(2)}L to {investment.seller}</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="mb-6">
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Transaction Reference (Optional)
+            </label>
+            <input
+              type="text"
+              value={reference}
+              onChange={(e) => setReference(e.target.value)}
+              placeholder="e.g., UTR123456789"
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500"
+            />
+          </div>
+
+          <div className="flex items-center space-x-3">
+            <button
+              onClick={onClose}
+              disabled={isLoading}
+              className="flex-1 px-4 py-2.5 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 font-medium disabled:opacity-50"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={() => onMarkCompleted(investment, reference)}
+              disabled={isLoading}
+              className="flex-1 px-4 py-2.5 bg-green-600 text-white rounded-lg hover:bg-green-700 font-medium disabled:opacity-50 flex items-center justify-center space-x-2"
+            >
+              {isLoading ? (
+                <>
+                  <Loader2 size={18} className="animate-spin" />
+                  <span>Updating...</span>
+                </>
+              ) : (
+                <>
+                  <CheckCircle size={18} />
+                  <span>Mark Completed</span>
+                </>
+              )}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
 };
 
 export default function Portfolio() {
@@ -35,6 +353,11 @@ export default function Portfolio() {
     pendingDisbursement: 0,
     overdue: 0
   });
+
+  // Modal states
+  const [processModal, setProcessModal] = useState({ open: false, investment: null });
+  const [completedModal, setCompletedModal] = useState({ open: false, investment: null });
+  const [actionLoading, setActionLoading] = useState(false);
 
   const fetchPortfolio = async () => {
     try {
@@ -119,6 +442,46 @@ export default function Portfolio() {
   useEffect(() => {
     fetchPortfolio();
   }, []);
+
+  // Process disbursement handler (for financier to initiate fund transfer)
+  const handleProcessDisbursement = async (investment, bankAccountId) => {
+    setActionLoading(true);
+    try {
+      // For financier-funded disbursements
+      await disbursementService.initiateFinancier({
+        invoiceId: investment.originalInvoiceId || investment.invoiceId,
+        bidId: investment.bidId,
+        bankAccountId: bankAccountId
+      });
+      setProcessModal({ open: false, investment: null });
+      await fetchPortfolio();
+      alert('Disbursement processed successfully! Funds will be transferred to the seller.');
+    } catch (err) {
+      console.error('Failed to process disbursement:', err);
+      alert(err.message || 'Failed to process disbursement');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  // Mark disbursement as completed handler
+  const handleMarkCompleted = async (investment, reference) => {
+    setActionLoading(true);
+    try {
+      await disbursementService.updateStatus(investment.id, {
+        status: 'COMPLETED',
+        transactionReference: reference || undefined
+      });
+      setCompletedModal({ open: false, investment: null });
+      await fetchPortfolio();
+      alert('Disbursement marked as completed!');
+    } catch (err) {
+      console.error('Failed to update disbursement:', err);
+      alert(err.message || 'Failed to update disbursement status');
+    } finally {
+      setActionLoading(false);
+    }
+  };
 
   const filteredActive = activeInvestments.filter(inv =>
     !searchTerm || inv.buyer.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -313,9 +676,27 @@ export default function Portfolio() {
                         <StatusBadge status={inv.status} />
                       </td>
                       <td className="px-6 py-4 text-center">
-                        <button className="p-2 hover:bg-gray-100 rounded-lg">
-                          <Eye size={18} className="text-gray-500" />
-                        </button>
+                        <div className="flex items-center justify-center space-x-2">
+                          {inv.status === 'pending_disbursement' && (
+                            <button
+                              onClick={() => setProcessModal({ open: true, investment: inv })}
+                              className="px-3 py-1.5 bg-purple-600 text-white rounded-lg text-sm font-medium hover:bg-purple-700"
+                            >
+                              Process
+                            </button>
+                          )}
+                          {inv.status === 'disbursed' && (
+                            <button
+                              onClick={() => setCompletedModal({ open: true, investment: inv })}
+                              className="px-3 py-1.5 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700"
+                            >
+                              Mark Done
+                            </button>
+                          )}
+                          <button className="p-2 hover:bg-gray-100 rounded-lg">
+                            <Eye size={18} className="text-gray-500" />
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -388,6 +769,23 @@ export default function Portfolio() {
           )}
         </div>
       </div>
+
+      {/* Modals */}
+      <ProcessDisbursementModal
+        isOpen={processModal.open}
+        onClose={() => setProcessModal({ open: false, investment: null })}
+        investment={processModal.investment}
+        onProcess={handleProcessDisbursement}
+        isLoading={actionLoading}
+      />
+
+      <MarkCompletedModal
+        isOpen={completedModal.open}
+        onClose={() => setCompletedModal({ open: false, investment: null })}
+        investment={completedModal.investment}
+        onMarkCompleted={handleMarkCompleted}
+        isLoading={actionLoading}
+      />
     </div>
   );
 }
