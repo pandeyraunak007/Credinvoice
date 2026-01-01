@@ -1,14 +1,11 @@
 /**
- * Mock AI Invoice Extractor
+ * AI Invoice Extractor using Groq Vision API
  *
- * In production, this would integrate with:
- * - Google Document AI
- * - GPT-4 Vision
- * - AWS Textract
- * - Custom OCR + ML models
- *
- * For MVP, we return mock extracted data with confidence scores.
+ * Integrates with Groq's Llama 4 Scout vision model to extract
+ * structured data from uploaded invoice PDFs and images.
  */
+
+import { extractInvoiceWithGroq, isValidGstin, ExtractedInvoiceData } from '../../services/groq.service';
 
 export interface ExtractedField<T> {
   value: T;
@@ -38,136 +35,247 @@ export interface InvoiceExtractionResult {
     message?: string;
   }>;
   flagsForReview: string[];
+  rawResponse?: string;
 }
-
-// Helper to generate random confidence score
-function randomConfidence(min: number = 85, max: number = 99): number {
-  return Math.round((Math.random() * (max - min) + min) * 10) / 10;
-}
-
-// Helper to generate mock GSTIN
-function generateMockGstin(): string {
-  const stateCode = String(Math.floor(Math.random() * 36) + 1).padStart(2, '0');
-  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
-  const pan = Array(5).fill(0).map(() => chars[Math.floor(Math.random() * 26)]).join('') +
-              String(Math.floor(Math.random() * 10000)).padStart(4, '0') +
-              chars[Math.floor(Math.random() * 26)];
-  return `${stateCode}${pan}1Z${Math.floor(Math.random() * 10)}`;
-}
-
-// Helper to generate mock invoice number
-function generateMockInvoiceNumber(): string {
-  const prefix = ['INV', 'BILL', 'TAX'][Math.floor(Math.random() * 3)];
-  const year = new Date().getFullYear();
-  const month = String(new Date().getMonth() + 1).padStart(2, '0');
-  const serial = String(Math.floor(Math.random() * 10000)).padStart(4, '0');
-  return `${prefix}-${year}${month}-${serial}`;
-}
-
-// Companies for mock data
-const mockCompanies = [
-  { name: 'Tata Steel Limited', gstin: '27AAACT2727Q1ZW' },
-  { name: 'Reliance Industries Ltd', gstin: '27AAACR5055K1ZS' },
-  { name: 'Mahindra & Mahindra', gstin: '27AAACM2314B1ZE' },
-  { name: 'Infosys Limited', gstin: '29AABCI1936E1ZG' },
-  { name: 'Kumar Textiles Pvt Ltd', gstin: '27AABCK1234B1ZX' },
-  { name: 'Singh Manufacturing Co', gstin: '09AADCS5678M1ZY' },
-  { name: 'Patel Enterprises', gstin: '24AAFCP9012L1ZZ' },
-  { name: 'Sharma Industries', gstin: '06BBASH3456N1ZA' },
-];
 
 /**
- * Mock invoice extraction from uploaded file
- * In production, this would analyze the actual PDF/image
+ * Calculate confidence score for a field based on extraction quality
+ */
+function calculateFieldConfidence(value: any, fieldName: string): number {
+  if (value === null || value === undefined) {
+    return 0;
+  }
+
+  let confidence = 85; // Base confidence for extracted fields
+
+  // Boost confidence for well-formatted values
+  switch (fieldName) {
+    case 'sellerGstin':
+    case 'buyerGstin':
+      if (typeof value === 'string' && isValidGstin(value)) {
+        confidence = 95;
+      } else if (typeof value === 'string' && value.length === 15) {
+        confidence = 80;
+      } else {
+        confidence = 40;
+      }
+      break;
+
+    case 'invoiceNumber':
+      if (typeof value === 'string' && value.length >= 3) {
+        confidence = 92;
+      }
+      break;
+
+    case 'invoiceDate':
+    case 'dueDate':
+      if (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value)) {
+        confidence = 94;
+      } else if (value) {
+        confidence = 75;
+      }
+      break;
+
+    case 'sellerName':
+    case 'buyerName':
+      if (typeof value === 'string' && value.length >= 3) {
+        confidence = 90;
+      }
+      break;
+
+    case 'subtotal':
+    case 'taxAmount':
+    case 'totalAmount':
+      if (typeof value === 'number' && value >= 0) {
+        confidence = 93;
+      }
+      break;
+  }
+
+  return confidence;
+}
+
+/**
+ * Extract invoice data from uploaded file using Groq Vision API
  */
 export async function extractInvoiceFromFile(
   filePath: string,
   uploadedBy: { type: string; name: string }
 ): Promise<InvoiceExtractionResult> {
-  // Simulate processing delay
-  await new Promise(resolve => setTimeout(resolve, 500));
-
-  // Generate mock data
-  const invoiceDate = new Date();
-  invoiceDate.setDate(invoiceDate.getDate() - Math.floor(Math.random() * 30)); // 0-30 days ago
-
-  const dueDate = new Date(invoiceDate);
-  dueDate.setDate(dueDate.getDate() + 30 + Math.floor(Math.random() * 60)); // 30-90 days from invoice
-
-  const subtotal = Math.round((50000 + Math.random() * 950000) * 100) / 100; // 50K to 10L
-  const taxRate = [0.05, 0.12, 0.18, 0.28][Math.floor(Math.random() * 4)]; // GST rates
-  const taxAmount = Math.round(subtotal * taxRate * 100) / 100;
-  const totalAmount = subtotal + taxAmount;
-
-  // Pick random seller and buyer
-  const seller = mockCompanies[Math.floor(Math.random() * mockCompanies.length)];
-  let buyer = mockCompanies[Math.floor(Math.random() * mockCompanies.length)];
-  while (buyer.name === seller.name) {
-    buyer = mockCompanies[Math.floor(Math.random() * mockCompanies.length)];
-  }
-
-  // Generate extraction result
   const extractionId = `EXT-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 
-  const fields = {
-    invoiceNumber: { value: generateMockInvoiceNumber(), confidence: randomConfidence(92, 99) },
-    invoiceDate: { value: invoiceDate.toISOString().split('T')[0], confidence: randomConfidence(90, 98) },
-    dueDate: { value: dueDate.toISOString().split('T')[0], confidence: randomConfidence(88, 96) },
-    sellerGstin: { value: seller.gstin, confidence: randomConfidence(85, 95) },
-    sellerName: { value: seller.name, confidence: randomConfidence(90, 98) },
-    buyerGstin: { value: buyer.gstin, confidence: randomConfidence(85, 95) },
-    buyerName: { value: buyer.name, confidence: randomConfidence(90, 98) },
-    subtotal: { value: subtotal, confidence: randomConfidence(92, 99) },
-    taxAmount: { value: taxAmount, confidence: randomConfidence(90, 97) },
-    totalAmount: { value: totalAmount, confidence: randomConfidence(94, 99) },
-  };
+  try {
+    // Call Groq Vision API for extraction
+    const extractedData = await extractInvoiceWithGroq(filePath);
 
-  // Calculate overall confidence
-  const confidenceValues = Object.values(fields).map(f => f.confidence);
-  const overallConfidence = Math.round(
-    (confidenceValues.reduce((a, b) => a + b, 0) / confidenceValues.length) * 10
-  ) / 10;
+    // Build fields with confidence scores
+    const fields = {
+      invoiceNumber: {
+        value: extractedData.invoiceNumber || 'UNKNOWN',
+        confidence: calculateFieldConfidence(extractedData.invoiceNumber, 'invoiceNumber'),
+      },
+      invoiceDate: {
+        value: extractedData.invoiceDate || new Date().toISOString().split('T')[0],
+        confidence: calculateFieldConfidence(extractedData.invoiceDate, 'invoiceDate'),
+      },
+      dueDate: {
+        value: extractedData.dueDate || calculateDefaultDueDate(extractedData.invoiceDate),
+        confidence: calculateFieldConfidence(extractedData.dueDate, 'dueDate'),
+      },
+      sellerGstin: {
+        value: extractedData.sellerGstin,
+        confidence: calculateFieldConfidence(extractedData.sellerGstin, 'sellerGstin'),
+      },
+      sellerName: {
+        value: extractedData.sellerName || 'Unknown Seller',
+        confidence: calculateFieldConfidence(extractedData.sellerName, 'sellerName'),
+      },
+      buyerGstin: {
+        value: extractedData.buyerGstin,
+        confidence: calculateFieldConfidence(extractedData.buyerGstin, 'buyerGstin'),
+      },
+      buyerName: {
+        value: extractedData.buyerName || 'Unknown Buyer',
+        confidence: calculateFieldConfidence(extractedData.buyerName, 'buyerName'),
+      },
+      subtotal: {
+        value: extractedData.subtotal || 0,
+        confidence: calculateFieldConfidence(extractedData.subtotal, 'subtotal'),
+      },
+      taxAmount: {
+        value: extractedData.taxAmount || 0,
+        confidence: calculateFieldConfidence(extractedData.taxAmount, 'taxAmount'),
+      },
+      totalAmount: {
+        value: extractedData.totalAmount || 0,
+        confidence: calculateFieldConfidence(extractedData.totalAmount, 'totalAmount'),
+      },
+    };
 
-  // Validation results
-  const validationResults = [
-    {
-      rule: 'VAL-001',
-      field: 'sellerGstin',
-      passed: /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[0-9A-Z]{1}[Z]{1}[0-9A-Z]{1}$/.test(seller.gstin),
-      message: 'GST format validation',
-    },
-    {
-      rule: 'VAL-002',
-      field: 'dates',
-      passed: dueDate > invoiceDate,
-      message: 'Due date must be after invoice date',
-    },
-    {
-      rule: 'VAL-003',
-      field: 'amounts',
-      passed: Math.abs(totalAmount - (subtotal + taxAmount)) < 1,
-      message: 'Amount consistency check',
-    },
-    {
-      rule: 'VAL-004',
-      passed: true, // Would check database for duplicates
-      message: 'Duplicate invoice check',
-    },
-  ];
+    // Calculate overall confidence
+    const confidenceValues = Object.values(fields).map(f => f.confidence);
+    const overallConfidence = Math.round(
+      (confidenceValues.reduce((a, b) => a + b, 0) / confidenceValues.length) * 10
+    ) / 10;
 
-  // Flag low confidence fields for review
-  const flagsForReview = Object.entries(fields)
-    .filter(([_, field]) => field.confidence < 90)
-    .map(([name, _]) => name);
+    // Run validation rules
+    const validationResults = runValidations(fields);
 
-  return {
-    success: true,
-    extractionId,
-    overallConfidence,
-    fields,
-    validationResults,
-    flagsForReview,
-  };
+    // Flag low confidence fields for review
+    const flagsForReview = Object.entries(fields)
+      .filter(([_, field]) => field.confidence < 80)
+      .map(([name, _]) => name);
+
+    return {
+      success: true,
+      extractionId,
+      overallConfidence,
+      fields,
+      validationResults,
+      flagsForReview,
+      rawResponse: extractedData.rawResponse,
+    };
+  } catch (error: any) {
+    console.error('Invoice extraction failed:', error);
+
+    // Return failed extraction with empty fields
+    return {
+      success: false,
+      extractionId,
+      overallConfidence: 0,
+      fields: {
+        invoiceNumber: { value: '', confidence: 0 },
+        invoiceDate: { value: '', confidence: 0 },
+        dueDate: { value: '', confidence: 0 },
+        sellerGstin: { value: null, confidence: 0 },
+        sellerName: { value: '', confidence: 0 },
+        buyerGstin: { value: null, confidence: 0 },
+        buyerName: { value: '', confidence: 0 },
+        subtotal: { value: 0, confidence: 0 },
+        taxAmount: { value: 0, confidence: 0 },
+        totalAmount: { value: 0, confidence: 0 },
+      },
+      validationResults: [],
+      flagsForReview: ['all'],
+    };
+  }
+}
+
+/**
+ * Calculate default due date (30 days from invoice date)
+ */
+function calculateDefaultDueDate(invoiceDate: string | null): string {
+  const baseDate = invoiceDate ? new Date(invoiceDate) : new Date();
+  baseDate.setDate(baseDate.getDate() + 30);
+  return baseDate.toISOString().split('T')[0];
+}
+
+/**
+ * Run validation rules on extracted data
+ */
+function runValidations(fields: InvoiceExtractionResult['fields']) {
+  const validations: InvoiceExtractionResult['validationResults'] = [];
+
+  // VAL-001: Seller GSTIN format
+  const sellerGstinValid = fields.sellerGstin.value === null || isValidGstin(fields.sellerGstin.value);
+  validations.push({
+    rule: 'VAL-001',
+    field: 'sellerGstin',
+    passed: sellerGstinValid,
+    message: sellerGstinValid ? 'Seller GSTIN format valid' : 'Seller GSTIN format invalid or missing',
+  });
+
+  // VAL-002: Buyer GSTIN format
+  const buyerGstinValid = fields.buyerGstin.value === null || isValidGstin(fields.buyerGstin.value);
+  validations.push({
+    rule: 'VAL-002',
+    field: 'buyerGstin',
+    passed: buyerGstinValid,
+    message: buyerGstinValid ? 'Buyer GSTIN format valid' : 'Buyer GSTIN format invalid or missing',
+  });
+
+  // VAL-003: Due date after invoice date
+  const invoiceDate = new Date(fields.invoiceDate.value);
+  const dueDate = new Date(fields.dueDate.value);
+  const datesValid = dueDate >= invoiceDate;
+  validations.push({
+    rule: 'VAL-003',
+    field: 'dates',
+    passed: datesValid,
+    message: datesValid ? 'Due date is after invoice date' : 'Due date should be after invoice date',
+  });
+
+  // VAL-004: Amount consistency (total = subtotal + tax)
+  const expectedTotal = fields.subtotal.value + fields.taxAmount.value;
+  const amountsConsistent = Math.abs(fields.totalAmount.value - expectedTotal) < 1;
+  validations.push({
+    rule: 'VAL-004',
+    field: 'amounts',
+    passed: amountsConsistent,
+    message: amountsConsistent
+      ? 'Amount calculation consistent'
+      : `Total (${fields.totalAmount.value}) should equal subtotal + tax (${expectedTotal})`,
+  });
+
+  // VAL-005: Invoice number present
+  const hasInvoiceNumber = fields.invoiceNumber.value && fields.invoiceNumber.value !== 'UNKNOWN';
+  validations.push({
+    rule: 'VAL-005',
+    field: 'invoiceNumber',
+    passed: !!hasInvoiceNumber,
+    message: hasInvoiceNumber ? 'Invoice number extracted' : 'Invoice number could not be extracted',
+  });
+
+  // VAL-006: Total amount positive
+  const hasValidTotal = fields.totalAmount.value > 0;
+  validations.push({
+    rule: 'VAL-006',
+    field: 'totalAmount',
+    passed: hasValidTotal,
+    message: hasValidTotal ? 'Total amount is valid' : 'Total amount should be greater than zero',
+  });
+
+  return validations;
 }
 
 /**
