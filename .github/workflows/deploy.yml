@@ -23,10 +23,12 @@ jobs:
           ssh-keyscan -H ${{ secrets.SERVER_HOST }} >> ~/.ssh/known_hosts
 
       - name: 🚀 Deploy to server
+        env:
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
         run: |
-          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} << 'ENDSSH'
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} "export GROQ_API_KEY='$GROQ_API_KEY' && bash -s" << 'ENDSSH'
             set -e
-            
+
             cd ~/Credinvoice-main
             
             echo "📥 Pulling latest code..."
@@ -35,6 +37,17 @@ jobs:
             
             echo "📦 Updating backend..."
             cd backend
+
+            # Update GROQ_API_KEY in .env if secret is set
+            if [ -n "$GROQ_API_KEY" ]; then
+              if grep -q "^GROQ_API_KEY=" .env 2>/dev/null; then
+                sed -i "s|^GROQ_API_KEY=.*|GROQ_API_KEY=$GROQ_API_KEY|" .env
+              else
+                echo "GROQ_API_KEY=$GROQ_API_KEY" >> .env
+              fi
+              echo "✓ GROQ_API_KEY configured"
+            fi
+
             npm ci
             npm run build
             npx prisma generate

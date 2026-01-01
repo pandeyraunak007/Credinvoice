@@ -1,12 +1,33 @@
 import Groq from 'groq-sdk';
 import * as fs from 'fs';
 import * as path from 'path';
-import sharp from 'sharp';
 
-// Initialize Groq client
-const groq = new Groq({
-  apiKey: process.env.GROQ_API_KEY,
-});
+// Lazy load sharp to prevent crashes if native binaries are missing
+let sharp: any = null;
+const getSharp = async () => {
+  if (!sharp) {
+    try {
+      sharp = (await import('sharp')).default;
+    } catch (e) {
+      console.warn('Sharp not available, image resizing disabled');
+    }
+  }
+  return sharp;
+};
+
+// Initialize Groq client (may be null if API key not set)
+let groq: Groq | null = null;
+try {
+  if (process.env.GROQ_API_KEY && process.env.GROQ_API_KEY !== 'your_groq_api_key_here') {
+    groq = new Groq({
+      apiKey: process.env.GROQ_API_KEY,
+    });
+  } else {
+    console.warn('[GroqService] GROQ_API_KEY not configured - AI extraction disabled');
+  }
+} catch (e) {
+  console.error('[GroqService] Failed to initialize Groq client:', e);
+}
 
 // Vision model for invoice extraction
 const VISION_MODEL = 'meta-llama/llama-4-scout-17b-16e-instruct';
@@ -34,6 +55,11 @@ export interface ExtractedInvoiceData {
 export async function extractInvoiceWithGroq(
   filePath: string
 ): Promise<ExtractedInvoiceData> {
+  // Check if Groq client is available
+  if (!groq) {
+    throw new Error('AI extraction not available. Please configure GROQ_API_KEY or use manual entry.');
+  }
+
   // Check if file exists
   if (!fs.existsSync(filePath)) {
     throw new Error('File not found');
@@ -91,12 +117,17 @@ async function processImage(filePath: string): Promise<{ base64: string; mimeTyp
   // Check size and resize if needed
   if (imageBuffer.length > MAX_IMAGE_SIZE) {
     console.log('Image too large, resizing...');
-    const resizedBuffer = await sharp(imageBuffer)
-      .resize(2000, 2000, { fit: 'inside', withoutEnlargement: true })
-      .jpeg({ quality: 85 })
-      .toBuffer();
-    imageBuffer = Buffer.from(resizedBuffer);
-    mimeType = 'image/jpeg';
+    const sharpLib = await getSharp();
+    if (sharpLib) {
+      const resizedBuffer = await sharpLib(imageBuffer)
+        .resize(2000, 2000, { fit: 'inside', withoutEnlargement: true })
+        .jpeg({ quality: 85 })
+        .toBuffer();
+      imageBuffer = Buffer.from(resizedBuffer);
+      mimeType = 'image/jpeg';
+    } else {
+      throw new Error('Image too large (max 4MB) and image processing is not available.');
+    }
   }
 
   const base64 = imageBuffer.toString('base64');
@@ -185,6 +216,10 @@ If a field is not clearly visible or cannot be determined, use null.
 For amounts, extract only the numeric value (e.g., 50000 not "₹50,000").`;
 
   const userPrompt = 'Please extract all invoice data from this image and return it as JSON.';
+
+  if (!groq) {
+    throw new Error('Groq client not initialized');
+  }
 
   try {
     const response = await groq.chat.completions.create({
