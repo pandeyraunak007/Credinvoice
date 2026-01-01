@@ -159,13 +159,22 @@ export default function NotificationDropdown() {
       {/* Bell Button */}
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="relative p-2 text-gray-600 hover:bg-gray-100 rounded-lg transition"
+        className={`relative p-2 rounded-lg transition ${
+          unreadCount > 0
+            ? 'text-blue-600 bg-blue-50 hover:bg-blue-100'
+            : 'text-gray-600 hover:bg-gray-100'
+        }`}
       >
-        <Bell size={20} />
+        <Bell size={20} className={unreadCount > 0 ? 'animate-wiggle' : ''} />
         {unreadCount > 0 && (
-          <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white text-xs rounded-full flex items-center justify-center font-medium">
-            {unreadCount > 9 ? '9+' : unreadCount}
-          </span>
+          <>
+            {/* Pulse ring animation */}
+            <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 rounded-full animate-ping opacity-75"></span>
+            {/* Badge with count */}
+            <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white text-xs rounded-full flex items-center justify-center font-bold shadow-lg">
+              {unreadCount > 9 ? '9+' : unreadCount}
+            </span>
+          </>
         )}
       </button>
 
