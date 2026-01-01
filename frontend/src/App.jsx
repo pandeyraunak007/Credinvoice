@@ -38,6 +38,9 @@ import Notifications from './components/Notifications';
 import ContractsPage from './pages/shared/ContractsPage';
 import ContractDetailPage from './pages/shared/ContractDetailPage';
 
+// Import Landing page
+import Landing from './pages/Landing';
+
 // Loading Spinner Component
 function LoadingSpinner() {
   return (
@@ -67,12 +70,12 @@ function ProtectedRoute({ children, allowedRoles = [], requireKYC = true }) {
   if (allowedRoles.length > 0 && !allowedRoles.includes(user.userType)) {
     // Redirect to appropriate dashboard based on user type
     const dashboardRoutes = {
-      BUYER: '/',
+      BUYER: '/dashboard',
       SELLER: '/seller',
       FINANCIER: '/financier',
       ADMIN: '/admin/kyc',
     };
-    return <Navigate to={dashboardRoutes[user.userType] || '/'} replace />;
+    return <Navigate to={dashboardRoutes[user.userType] || '/dashboard'} replace />;
   }
 
   // Check KYC status (skip for admin)
@@ -112,12 +115,12 @@ function KYCRoute({ children }) {
   // If KYC is already complete, redirect to dashboard
   if (isKYCComplete) {
     const dashboardRoutes = {
-      BUYER: '/',
+      BUYER: '/dashboard',
       SELLER: '/seller',
       FINANCIER: '/financier',
       ADMIN: '/admin/kyc',
     };
-    return <Navigate to={dashboardRoutes[user.userType] || '/'} replace />;
+    return <Navigate to={dashboardRoutes[user.userType] || '/dashboard'} replace />;
   }
 
   return children;
@@ -139,12 +142,12 @@ function PublicRoute({ children }) {
 
     // Redirect to appropriate dashboard
     const dashboardRoutes = {
-      BUYER: '/',
+      BUYER: '/dashboard',
       SELLER: '/seller',
       FINANCIER: '/financier',
       ADMIN: '/admin/kyc',
     };
-    return <Navigate to={dashboardRoutes[user.userType] || '/'} replace />;
+    return <Navigate to={dashboardRoutes[user.userType] || '/dashboard'} replace />;
   }
 
   return children;
@@ -154,7 +157,10 @@ function PublicRoute({ children }) {
 function AppRoutes() {
   return (
     <Routes>
-      {/* Public Routes */}
+      {/* Landing Page - Public */}
+      <Route path="/" element={<Landing />} />
+
+      {/* Public Auth Routes */}
       <Route
         path="/login"
         element={
@@ -192,7 +198,7 @@ function AppRoutes() {
 
       {/* Buyer Portal Routes */}
       <Route
-        path="/"
+        path="/dashboard"
         element={
           <ProtectedRoute allowedRoles={['BUYER']}>
             <BuyerDashboard />
@@ -400,8 +406,8 @@ function AppRoutes() {
         }
       />
 
-      {/* Catch all - redirect to login */}
-      <Route path="*" element={<Navigate to="/login" replace />} />
+      {/* Catch all - redirect to landing page */}
+      <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );
 }
