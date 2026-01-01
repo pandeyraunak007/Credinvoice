@@ -62,8 +62,10 @@ export default function NotificationDropdown() {
   const fetchNotifications = async () => {
     try {
       const response = await notificationService.getAll({ limit: 10 });
-      setNotifications(response.data?.notifications || response.data || []);
-      setUnreadCount(response.data?.unreadCount || 0);
+      // response.data contains the notifications array
+      // response.unreadCount contains the unread count
+      setNotifications(response.data || []);
+      setUnreadCount(response.unreadCount || 0);
     } catch (err) {
       console.error('Failed to fetch notifications:', err);
     }
