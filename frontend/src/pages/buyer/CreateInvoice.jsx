@@ -3,10 +3,255 @@ import { useNavigate } from 'react-router-dom';
 import {
   ArrowLeft, Plus, Trash2, Upload, FileText, Search, Building2, User,
   Calendar, IndianRupee, Package, Paperclip, CheckCircle, AlertCircle,
-  X, Loader2, ChevronDown, UserPlus, Send, Save, Info, Check, Percent, Zap
+  X, Loader2, ChevronDown, UserPlus, Send, Save, Info, Check, Percent, Zap,
+  Sparkles, FileImage, Edit3
 } from 'lucide-react';
 import { invoiceService, profileService, discountService } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
+
+// AI Extraction Section Component
+const AIExtractionSection = ({ onExtracted, onManualEntry }) => {
+  const [file, setFile] = useState(null);
+  const [preview, setPreview] = useState(null);
+  const [isExtracting, setIsExtracting] = useState(false);
+  const [error, setError] = useState(null);
+  const [extractedData, setExtractedData] = useState(null);
+  const fileInputRef = useRef(null);
+
+  const handleFileSelect = (e) => {
+    const selectedFile = e.target.files[0];
+    if (!selectedFile) return;
+
+    // Validate file type
+    const validTypes = ['image/jpeg', 'image/png', 'image/jpg', 'application/pdf'];
+    if (!validTypes.includes(selectedFile.type)) {
+      setError('Please upload a JPG, PNG, or PDF file');
+      return;
+    }
+
+    // Validate file size (max 10MB)
+    if (selectedFile.size > 10 * 1024 * 1024) {
+      setError('File size must be less than 10MB');
+      return;
+    }
+
+    setFile(selectedFile);
+    setError(null);
+    setExtractedData(null);
+
+    // Create preview for images
+    if (selectedFile.type.startsWith('image/')) {
+      const reader = new FileReader();
+      reader.onload = (e) => setPreview(e.target.result);
+      reader.readAsDataURL(selectedFile);
+    } else {
+      setPreview(null);
+    }
+  };
+
+  const handleExtract = async () => {
+    if (!file) return;
+
+    setIsExtracting(true);
+    setError(null);
+
+    try {
+      const response = await invoiceService.extractFromFile(file);
+      const data = response.data;
+      setExtractedData(data);
+
+      // Pass extracted data to parent
+      if (data) {
+        onExtracted({
+          invoiceNumber: data.invoiceNumber || '',
+          invoiceDate: data.invoiceDate || '',
+          dueDate: data.dueDate || '',
+          sellerName: data.sellerName || '',
+          sellerGstin: data.sellerGstin || '',
+          buyerName: data.buyerName || '',
+          buyerGstin: data.buyerGstin || '',
+          subtotal: data.subtotal || 0,
+          taxAmount: data.taxAmount || 0,
+          totalAmount: data.totalAmount || 0,
+        });
+      }
+    } catch (err) {
+      console.error('AI extraction failed:', err);
+      setError(err.message || 'Failed to extract invoice data. Please try again or enter manually.');
+    } finally {
+      setIsExtracting(false);
+    }
+  };
+
+  const handleReset = () => {
+    setFile(null);
+    setPreview(null);
+    setError(null);
+    setExtractedData(null);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
+
+  return (
+    <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl border border-blue-200 overflow-hidden">
+      <div className="px-6 py-4 bg-gradient-to-r from-blue-600 to-indigo-600">
+        <div className="flex items-center space-x-3">
+          <div className="w-10 h-10 bg-white/20 rounded-full flex items-center justify-center">
+            <Sparkles size={20} className="text-white" />
+          </div>
+          <div>
+            <h3 className="font-semibold text-white">AI Invoice Extraction</h3>
+            <p className="text-sm text-blue-100">Upload an invoice image and let AI fill the form</p>
+          </div>
+        </div>
+      </div>
+
+      <div className="p-6">
+        {!file ? (
+          <div className="space-y-4">
+            <div
+              onClick={() => fileInputRef.current?.click()}
+              className="border-2 border-dashed border-blue-300 rounded-xl p-8 text-center cursor-pointer hover:border-blue-400 hover:bg-blue-50/50 transition"
+            >
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".jpg,.jpeg,.png,.pdf"
+                onChange={handleFileSelect}
+                className="hidden"
+              />
+              <FileImage size={48} className="text-blue-400 mx-auto mb-4" />
+              <p className="text-gray-700 font-medium mb-1">Upload Invoice Image</p>
+              <p className="text-sm text-gray-500">JPG, PNG, or PDF (Max 10MB)</p>
+            </div>
+
+            <div className="flex items-center justify-center">
+              <div className="flex-1 border-t border-gray-300"></div>
+              <span className="px-4 text-sm text-gray-500">or</span>
+              <div className="flex-1 border-t border-gray-300"></div>
+            </div>
+
+            <button
+              onClick={onManualEntry}
+              className="w-full flex items-center justify-center space-x-2 px-4 py-3 border border-gray-300 rounded-xl text-gray-700 hover:bg-gray-50 transition"
+            >
+              <Edit3 size={18} />
+              <span>Enter Details Manually</span>
+            </button>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {/* File Preview */}
+            <div className="flex items-start space-x-4 p-4 bg-white rounded-xl border border-gray-200">
+              {preview ? (
+                <img src={preview} alt="Invoice preview" className="w-24 h-24 object-cover rounded-lg" />
+              ) : (
+                <div className="w-24 h-24 bg-gray-100 rounded-lg flex items-center justify-center">
+                  <FileText size={32} className="text-gray-400" />
+                </div>
+              )}
+              <div className="flex-1">
+                <p className="font-medium text-gray-800 truncate">{file.name}</p>
+                <p className="text-sm text-gray-500">{(file.size / 1024).toFixed(1)} KB</p>
+                {extractedData && (
+                  <div className="mt-2 flex items-center text-green-600 text-sm">
+                    <CheckCircle size={16} className="mr-1" />
+                    Data extracted successfully
+                  </div>
+                )}
+              </div>
+              <button
+                onClick={handleReset}
+                className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Error Message */}
+            {error && (
+              <div className="p-4 bg-red-50 border border-red-200 rounded-xl flex items-start space-x-3">
+                <AlertCircle size={20} className="text-red-500 flex-shrink-0" />
+                <div>
+                  <p className="text-red-700 font-medium">Extraction Failed</p>
+                  <p className="text-sm text-red-600 mt-1">{error}</p>
+                </div>
+              </div>
+            )}
+
+            {/* Extracted Data Preview */}
+            {extractedData && (
+              <div className="p-4 bg-green-50 border border-green-200 rounded-xl">
+                <p className="font-medium text-green-800 mb-3 flex items-center">
+                  <CheckCircle size={16} className="mr-2" />
+                  Extracted Data
+                </p>
+                <div className="grid grid-cols-2 gap-3 text-sm">
+                  <div>
+                    <span className="text-gray-500">Invoice #:</span>
+                    <span className="ml-2 font-medium text-gray-800">{extractedData.invoiceNumber || 'Not found'}</span>
+                  </div>
+                  <div>
+                    <span className="text-gray-500">Total:</span>
+                    <span className="ml-2 font-medium text-gray-800">
+                      {extractedData.totalAmount ? `₹${extractedData.totalAmount.toLocaleString('en-IN')}` : 'Not found'}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-gray-500">Seller:</span>
+                    <span className="ml-2 font-medium text-gray-800">{extractedData.sellerName || 'Not found'}</span>
+                  </div>
+                  <div>
+                    <span className="text-gray-500">Due Date:</span>
+                    <span className="ml-2 font-medium text-gray-800">{extractedData.dueDate || 'Not found'}</span>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Action Buttons */}
+            <div className="flex space-x-3">
+              {!extractedData ? (
+                <button
+                  onClick={handleExtract}
+                  disabled={isExtracting}
+                  className="flex-1 flex items-center justify-center space-x-2 bg-gradient-to-r from-blue-600 to-indigo-600 text-white px-6 py-3 rounded-xl hover:from-blue-700 hover:to-indigo-700 disabled:opacity-50 transition font-medium"
+                >
+                  {isExtracting ? (
+                    <>
+                      <Loader2 size={18} className="animate-spin" />
+                      <span>Extracting with AI...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles size={18} />
+                      <span>Extract Invoice Data</span>
+                    </>
+                  )}
+                </button>
+              ) : (
+                <button
+                  onClick={handleReset}
+                  className="flex-1 flex items-center justify-center space-x-2 border border-gray-300 text-gray-700 px-6 py-3 rounded-xl hover:bg-gray-50 transition font-medium"
+                >
+                  <Upload size={18} />
+                  <span>Upload Different Invoice</span>
+                </button>
+              )}
+            </div>
+
+            {extractedData && (
+              <p className="text-center text-sm text-gray-500">
+                Form has been pre-filled with extracted data. Please verify and edit if needed.
+              </p>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
 
 // Form Section Component
 const FormSection = ({ title, icon: Icon, children, collapsible = false, allowOverflow = false }) => {
@@ -595,6 +840,10 @@ export default function CreateInvoice() {
   const [showDiscountConfirmModal, setShowDiscountConfirmModal] = useState(false);
   const [errors, setErrors] = useState({});
 
+  // AI extraction mode state
+  const [showAISection, setShowAISection] = useState(true);
+  const [hasExtractedData, setHasExtractedData] = useState(false);
+
   // Get buyer info from profile
   const buyerInfo = profile?.buyer || {};
 
@@ -820,6 +1069,43 @@ export default function CreateInvoice() {
     await executeSubmit(false);
   };
 
+  // Handle AI extracted data
+  const handleExtractedData = (data) => {
+    // Update invoice data
+    setInvoiceData(prev => ({
+      ...prev,
+      invoiceNumber: data.invoiceNumber || prev.invoiceNumber,
+      invoiceDate: data.invoiceDate || prev.invoiceDate,
+      dueDate: data.dueDate || prev.dueDate,
+    }));
+
+    // Update amounts
+    setAmounts(prev => ({
+      ...prev,
+      subtotal: data.subtotal?.toString() || prev.subtotal,
+      totalAmount: data.totalAmount?.toString() || prev.totalAmount,
+    }));
+
+    // If tax amount is extracted, try to distribute it
+    if (data.taxAmount) {
+      const halfTax = (data.taxAmount / 2).toFixed(2);
+      setAmounts(prev => ({
+        ...prev,
+        cgst: halfTax,
+        sgst: halfTax,
+      }));
+    }
+
+    // Mark that we have extracted data and hide the AI section
+    setHasExtractedData(true);
+    setShowAISection(false);
+  };
+
+  // Handle manual entry choice
+  const handleManualEntry = () => {
+    setShowAISection(false);
+  };
+
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
@@ -845,6 +1131,38 @@ export default function CreateInvoice() {
       {/* Content */}
       <div className="max-w-5xl mx-auto px-6 py-8 pb-32">
         <div className="space-y-6">
+          {/* AI Extraction Section - Show only when showAISection is true */}
+          {showAISection && (
+            <AIExtractionSection
+              onExtracted={handleExtractedData}
+              onManualEntry={handleManualEntry}
+            />
+          )}
+
+          {/* Show form sections when AI section is hidden */}
+          {!showAISection && (
+            <>
+              {/* Extracted Data Banner */}
+              {hasExtractedData && (
+                <div className="bg-green-50 border border-green-200 rounded-xl p-4 flex items-center justify-between">
+                  <div className="flex items-center space-x-3">
+                    <div className="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center">
+                      <Sparkles size={20} className="text-green-600" />
+                    </div>
+                    <div>
+                      <p className="font-medium text-green-800">Invoice Data Extracted</p>
+                      <p className="text-sm text-green-600">Please review and edit the pre-filled information below</p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => setShowAISection(true)}
+                    className="text-sm text-green-700 hover:text-green-800 font-medium"
+                  >
+                    Upload Another
+                  </button>
+                </div>
+              )}
+
           {/* Invoice Details Section */}
           <FormSection title="Invoice Details" icon={FileText}>
             <div className="grid grid-cols-3 gap-6">
@@ -1217,10 +1535,13 @@ export default function CreateInvoice() {
               </div>
             )}
           </FormSection>
+          </>
+          )}
         </div>
       </div>
 
-      {/* Footer */}
+      {/* Footer - Only show when form is visible */}
+      {!showAISection && (
       <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 px-6 py-4">
         {submitError && (
           <div className="max-w-5xl mx-auto mb-3 p-3 bg-red-50 border border-red-200 rounded-lg flex items-center space-x-2">
@@ -1265,6 +1586,7 @@ export default function CreateInvoice() {
           </div>
         </div>
       </div>
+      )}
 
       {/* Seller Referral Modal */}
       <SellerReferralModal
