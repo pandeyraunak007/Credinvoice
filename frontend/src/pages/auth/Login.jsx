@@ -22,19 +22,14 @@ export default function Login() {
     try {
       const user = await login(formData.email, formData.password);
 
-      // Redirect based on user type and KYC status
-      // The App.jsx will handle proper routing based on KYC status
-      if (user.userType === 'ADMIN') {
-        navigate('/admin/kyc');
-      } else if (user.userType === 'BUYER') {
-        navigate('/');
-      } else if (user.userType === 'SELLER') {
-        navigate('/seller');
-      } else if (user.userType === 'FINANCIER') {
-        navigate('/financier');
-      } else {
-        navigate('/');
-      }
+      // Redirect based on user type
+      const dashboardRoutes = {
+        ADMIN: '/admin/kyc',
+        BUYER: '/dashboard',
+        SELLER: '/seller',
+        FINANCIER: '/financier',
+      };
+      navigate(dashboardRoutes[user.userType] || '/dashboard');
     } catch (err) {
       setError(err.message || 'Login failed. Please check your credentials.');
     } finally {
