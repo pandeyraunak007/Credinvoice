@@ -92,6 +92,12 @@ export class InvoiceService {
       }
     }
 
+    // For GST_BACKED invoices created by sellers, automatically open for bidding
+    // For other invoices (DD), start as DRAFT
+    const initialStatus = (data.productType === 'GST_BACKED' && entityType === 'SELLER')
+      ? 'OPEN_FOR_BIDDING'
+      : 'DRAFT';
+
     const invoice = await prisma.invoice.create({
       data: {
         invoiceNumber: data.invoiceNumber,
@@ -109,7 +115,7 @@ export class InvoiceService {
         buyerId,
         sellerId,
         productType: data.productType as ProductType,
-        status: 'DRAFT',
+        status: initialStatus as InvoiceStatus,
         documentUrl,
       },
     });
@@ -141,6 +147,23 @@ export class InvoiceService {
           message: `${data.sellerName} has uploaded invoice ${data.invoiceNumber} for your review.`,
           data: { invoiceNumber: data.invoiceNumber, sellerName: data.sellerName },
         }).catch(err => console.error('Failed to create invoice notification:', err));
+      }
+    }
+
+    // For GST_BACKED invoices, notify all financiers about new bidding opportunity
+    if (data.productType === 'GST_BACKED' && initialStatus === 'OPEN_FOR_BIDDING') {
+      const financiers = await prisma.financier.findMany({
+        select: { userId: true },
+      });
+
+      for (const financier of financiers) {
+        notificationService.createNotification({
+          userId: financier.userId,
+          type: 'NEW_INVOICE_AVAILABLE',
+          title: 'New GST Financing Opportunity',
+          message: `Invoice ${data.invoiceNumber} worth ₹${(data.totalAmount / 100000).toFixed(2)}L is now available for bidding.`,
+          data: { invoiceId: invoice.id, invoiceNumber: data.invoiceNumber, amount: data.totalAmount },
+        }).catch(err => console.error('Failed to notify financier:', err));
       }
     }
 
