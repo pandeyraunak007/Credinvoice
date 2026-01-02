@@ -398,15 +398,19 @@ export class InvoiceService {
   }
 
   // Get invoices available for bidding (for financiers)
-  async getAvailableForBidding(userId: string, query: { page: number; limit: number }) {
+  async getAvailableForBidding(userId: string, query: { page: number; limit: number; productType?: string }) {
     const { entityId } = await this.getEntityInfo(userId, 'FINANCIER');
-    const { page, limit } = query;
+    const { page, limit, productType } = query;
     const skip = (page - 1) * limit;
 
-    const where = {
+    const where: any = {
       status: 'OPEN_FOR_BIDDING' as InvoiceStatus,
-      // Could add: financier must be mapped to buyer/seller
     };
+
+    // Filter by productType if specified
+    if (productType) {
+      where.productType = productType;
+    }
 
     const [invoices, total] = await Promise.all([
       prisma.invoice.findMany({
@@ -414,6 +418,8 @@ export class InvoiceService {
         include: {
           buyer: { select: { id: true, companyName: true, kycStatus: true } },
           seller: { select: { id: true, companyName: true, kycStatus: true } },
+          discountOffer: { select: { id: true, discountPercentage: true, earlyPaymentDate: true, status: true } },
+          bids: { select: { id: true, discountRate: true, haircutPercentage: true, status: true } },
           _count: { select: { bids: true } },
         },
         orderBy: { createdAt: 'desc' },

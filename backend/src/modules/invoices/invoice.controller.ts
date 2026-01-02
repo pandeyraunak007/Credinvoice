@@ -169,6 +169,7 @@ export const getAvailableForBidding = asyncHandler(async (req: Request, res: Res
   const query = {
     page: parseInt(req.query.page as string) || 1,
     limit: parseInt(req.query.limit as string) || 20,
+    productType: req.query.productType as string | undefined,
   };
 
   const result = await invoiceService.getAvailableForBidding(req.user.userId, query);

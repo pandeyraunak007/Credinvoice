@@ -21,6 +21,7 @@ import { SellerDashboard, OfferDetailPage, DiscountOffersList, GSTFinancing } fr
 // Import Financier pages
 import FinancierDashboard from './pages/financier/Dashboard';
 import Marketplace from './pages/financier/Marketplace';
+import FinancierGSTFinancing from './pages/financier/GSTFinancing';
 import Portfolio from './pages/financier/Portfolio';
 import Collections from './pages/financier/Collections';
 
@@ -342,6 +343,14 @@ function AppRoutes() {
         element={
           <ProtectedRoute allowedRoles={['FINANCIER']}>
             <Marketplace />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/financier/gst-financing"
+        element={
+          <ProtectedRoute allowedRoles={['FINANCIER']}>
+            <FinancierGSTFinancing />
           </ProtectedRoute>
         }
       />

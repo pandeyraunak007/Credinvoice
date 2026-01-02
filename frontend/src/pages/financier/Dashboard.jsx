@@ -4,7 +4,8 @@ import {
   TrendingUp, FileText, Clock, CheckCircle, IndianRupee,
   Calendar, Building2, ChevronRight, AlertCircle, CreditCard,
   Wallet, PieChart, Target, ArrowUpRight, ArrowDownRight,
-  Briefcase, DollarSign, Timer, BarChart3, Filter, Loader2, Settings
+  Briefcase, DollarSign, Timer, BarChart3, Filter, Loader2, Settings,
+  Shield, Percent
 } from 'lucide-react';
 import { invoiceService, bidService, disbursementService } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
@@ -180,12 +181,27 @@ export default function FinancierDashboard() {
             <Link to="/financier" className="flex items-center space-x-3 px-3 py-2.5 bg-purple-50 text-purple-700 rounded-lg font-medium">
               <TrendingUp size={20} /><span>Dashboard</span>
             </Link>
+
+            {/* Financing Options Section */}
+            <div className="pt-3 pb-1">
+              <p className="px-3 text-xs font-semibold text-gray-400 uppercase tracking-wider">Financing Options</p>
+            </div>
             <Link to="/financier/marketplace" className="flex items-center space-x-3 px-3 py-2.5 text-gray-700 hover:bg-gray-50 rounded-lg">
-              <Target size={20} /><span>Marketplace</span>
-              {availableInvoices.length > 0 && (
-                <span className="ml-auto bg-green-100 text-green-700 text-xs px-2 py-0.5 rounded-full">{availableInvoices.length} new</span>
+              <Percent size={20} /><span>Dynamic Discounting</span>
+            </Link>
+            <Link to="/financier/gst-financing" className="flex items-center space-x-3 px-3 py-2.5 text-gray-700 hover:bg-gray-50 rounded-lg">
+              <Shield size={20} /><span>GST Financing</span>
+              {availableInvoices.filter(i => i.productType === 'GST_BACKED').length > 0 && (
+                <span className="ml-auto bg-emerald-100 text-emerald-700 text-xs px-2 py-0.5 rounded-full">
+                  {availableInvoices.filter(i => i.productType === 'GST_BACKED').length}
+                </span>
               )}
             </Link>
+
+            {/* Portfolio Section */}
+            <div className="pt-3 pb-1">
+              <p className="px-3 text-xs font-semibold text-gray-400 uppercase tracking-wider">Portfolio</p>
+            </div>
             <Link to="/financier/bids" className="flex items-center space-x-3 px-3 py-2.5 text-gray-700 hover:bg-gray-50 rounded-lg">
               <CreditCard size={20} /><span>My Bids</span>
               {activeBids.length > 0 && (
@@ -193,7 +209,7 @@ export default function FinancierDashboard() {
               )}
             </Link>
             <Link to="/financier/portfolio" className="flex items-center space-x-3 px-3 py-2.5 text-gray-700 hover:bg-gray-50 rounded-lg">
-              <Briefcase size={20} /><span>Portfolio</span>
+              <Briefcase size={20} /><span>Investments</span>
             </Link>
             <Link to="/financier/collections" className="flex items-center space-x-3 px-3 py-2.5 text-gray-700 hover:bg-gray-50 rounded-lg">
               <Wallet size={20} /><span>Collections</span>

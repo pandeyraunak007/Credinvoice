@@ -254,7 +254,8 @@ export default function Marketplace() {
         setLoading(true);
         setError(null);
       }
-      const response = await invoiceService.getAvailable();
+      // Fetch only DD_EARLY_PAYMENT (Dynamic Discounting) invoices
+      const response = await invoiceService.getAvailable({ productType: 'DD_EARLY_PAYMENT' });
       // Transform API data to match component's expected format
       const transformedInvoices = (response.data || []).map(inv => ({
         id: inv.id,
@@ -423,8 +424,8 @@ export default function Marketplace() {
                 <ArrowLeft size={20} className="text-gray-600" />
               </button>
               <div>
-                <h1 className="text-xl font-bold text-gray-800">Invoice Marketplace</h1>
-                <p className="text-sm text-gray-500">Browse and bid on approved invoices</p>
+                <h1 className="text-xl font-bold text-gray-800">Dynamic Discounting Marketplace</h1>
+                <p className="text-sm text-gray-500">Bid on buyer-initiated early payment invoices</p>
               </div>
             </div>
             <button
