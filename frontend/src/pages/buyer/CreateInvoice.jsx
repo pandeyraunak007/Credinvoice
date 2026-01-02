@@ -102,15 +102,13 @@ const AIExtractionSection = ({ onExtracted, onManualEntry }) => {
   };
 
   return (
-    <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl border border-blue-200 overflow-hidden">
-      <div className="px-6 py-4 bg-gradient-to-r from-blue-600 to-indigo-600">
+    <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+      <div className="px-6 py-4 border-b border-gray-200 bg-gray-50">
         <div className="flex items-center space-x-3">
-          <div className="w-10 h-10 bg-white/20 rounded-full flex items-center justify-center">
-            <Sparkles size={20} className="text-white" />
-          </div>
+          <Sparkles size={20} className="text-gray-600" />
           <div>
-            <h3 className="font-semibold text-white">AI Invoice Extraction</h3>
-            <p className="text-sm text-blue-100">Upload an invoice image and let AI fill the form</p>
+            <h3 className="font-semibold text-gray-800">AI Invoice Extraction</h3>
+            <p className="text-sm text-gray-500">Upload an invoice image to auto-fill the form</p>
           </div>
         </div>
       </div>
@@ -120,7 +118,7 @@ const AIExtractionSection = ({ onExtracted, onManualEntry }) => {
           <div className="space-y-4">
             <div
               onClick={() => fileInputRef.current?.click()}
-              className="border-2 border-dashed border-blue-300 rounded-xl p-8 text-center cursor-pointer hover:border-blue-400 hover:bg-blue-50/50 transition"
+              className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center cursor-pointer hover:border-gray-400 hover:bg-gray-50 transition"
             >
               <input
                 ref={fileInputRef}
@@ -129,91 +127,71 @@ const AIExtractionSection = ({ onExtracted, onManualEntry }) => {
                 onChange={handleFileSelect}
                 className="hidden"
               />
-              <FileImage size={48} className="text-blue-400 mx-auto mb-4" />
-              <p className="text-gray-700 font-medium mb-1">Upload Invoice Image</p>
-              <p className="text-sm text-gray-500">JPG, PNG, or PDF (Max 10MB)</p>
+              <Upload size={36} className="text-gray-400 mx-auto mb-3" />
+              <p className="text-gray-700 font-medium mb-1">Click to upload invoice</p>
+              <p className="text-sm text-gray-400">JPG, PNG, or PDF (Max 10MB)</p>
             </div>
 
             <div className="flex items-center justify-center">
-              <div className="flex-1 border-t border-gray-300"></div>
-              <span className="px-4 text-sm text-gray-500">or</span>
-              <div className="flex-1 border-t border-gray-300"></div>
+              <div className="flex-1 border-t border-gray-200"></div>
+              <span className="px-4 text-sm text-gray-400">or</span>
+              <div className="flex-1 border-t border-gray-200"></div>
             </div>
 
             <button
               onClick={onManualEntry}
-              className="w-full flex items-center justify-center space-x-2 px-4 py-3 border border-gray-300 rounded-xl text-gray-700 hover:bg-gray-50 transition"
+              className="w-full flex items-center justify-center space-x-2 px-4 py-2.5 border border-gray-300 rounded-lg text-gray-600 hover:bg-gray-50 transition"
             >
-              <Edit3 size={18} />
+              <Edit3 size={16} />
               <span>Enter Details Manually</span>
             </button>
           </div>
         ) : (
           <div className="space-y-4">
             {/* File Preview */}
-            <div className="flex items-start space-x-4 p-4 bg-white rounded-xl border border-gray-200">
+            <div className="flex items-center space-x-4 p-3 bg-gray-50 rounded-lg">
               {preview ? (
-                <img src={preview} alt="Invoice preview" className="w-24 h-24 object-cover rounded-lg" />
+                <img src={preview} alt="Invoice preview" className="w-16 h-16 object-cover rounded" />
               ) : (
-                <div className="w-24 h-24 bg-gray-100 rounded-lg flex items-center justify-center">
-                  <FileText size={32} className="text-gray-400" />
+                <div className="w-16 h-16 bg-gray-200 rounded flex items-center justify-center">
+                  <FileText size={24} className="text-gray-400" />
                 </div>
               )}
-              <div className="flex-1">
+              <div className="flex-1 min-w-0">
                 <p className="font-medium text-gray-800 truncate">{file.name}</p>
                 <p className="text-sm text-gray-500">{(file.size / 1024).toFixed(1)} KB</p>
-                {extractedData && (
-                  <div className="mt-2 flex items-center text-green-600 text-sm">
-                    <CheckCircle size={16} className="mr-1" />
-                    Data extracted successfully
-                  </div>
-                )}
               </div>
               <button
                 onClick={handleReset}
-                className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition"
+                className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-200 rounded transition"
               >
-                <X size={18} />
+                <X size={16} />
               </button>
             </div>
 
             {/* Error Message */}
             {error && (
-              <div className="p-4 bg-red-50 border border-red-200 rounded-xl flex items-start space-x-3">
-                <AlertCircle size={20} className="text-red-500 flex-shrink-0" />
+              <div className="p-3 bg-red-50 border border-red-200 rounded-lg flex items-start space-x-2">
+                <AlertCircle size={18} className="text-red-500 flex-shrink-0 mt-0.5" />
                 <div>
-                  <p className="text-red-700 font-medium">Extraction Failed</p>
-                  <p className="text-sm text-red-600 mt-1">{error}</p>
+                  <p className="text-sm text-red-700 font-medium">Extraction Failed</p>
+                  <p className="text-sm text-red-600">{error}</p>
                 </div>
               </div>
             )}
 
             {/* Extracted Data Preview */}
             {extractedData && (
-              <div className="p-4 bg-green-50 border border-green-200 rounded-xl">
-                <p className="font-medium text-green-800 mb-3 flex items-center">
-                  <CheckCircle size={16} className="mr-2" />
-                  Extracted Data
+              <div className="p-3 bg-green-50 border border-green-200 rounded-lg">
+                <p className="text-sm font-medium text-green-700 mb-2 flex items-center">
+                  <CheckCircle size={14} className="mr-1.5" />
+                  Data extracted successfully
                 </p>
-                <div className="grid grid-cols-2 gap-3 text-sm">
-                  <div>
-                    <span className="text-gray-500">Invoice #:</span>
-                    <span className="ml-2 font-medium text-gray-800">{extractedData.invoiceNumber || 'Not found'}</span>
-                  </div>
-                  <div>
-                    <span className="text-gray-500">Total:</span>
-                    <span className="ml-2 font-medium text-gray-800">
-                      {extractedData.totalAmount ? `₹${extractedData.totalAmount.toLocaleString('en-IN')}` : 'Not found'}
-                    </span>
-                  </div>
-                  <div>
-                    <span className="text-gray-500">Seller:</span>
-                    <span className="ml-2 font-medium text-gray-800">{extractedData.sellerName || 'Not found'}</span>
-                  </div>
-                  <div>
-                    <span className="text-gray-500">Due Date:</span>
-                    <span className="ml-2 font-medium text-gray-800">{extractedData.dueDate || 'Not found'}</span>
-                  </div>
+                <div className="grid grid-cols-2 gap-2 text-sm">
+                  <div><span className="text-gray-500">Invoice #:</span> <span className="text-gray-800">{extractedData.invoiceNumber || '-'}</span></div>
+                  <div><span className="text-gray-500">Total:</span> <span className="text-gray-800">{extractedData.totalAmount ? `₹${extractedData.totalAmount.toLocaleString('en-IN')}` : '-'}</span></div>
+                  <div><span className="text-gray-500">Seller:</span> <span className="text-gray-800">{extractedData.sellerName || '-'}</span></div>
+                  <div><span className="text-gray-500">Due:</span> <span className="text-gray-800">{extractedData.dueDate || '-'}</span></div>
                 </div>
               </div>
             )}
@@ -224,34 +202,34 @@ const AIExtractionSection = ({ onExtracted, onManualEntry }) => {
                 <button
                   onClick={handleExtract}
                   disabled={isExtracting}
-                  className="flex-1 flex items-center justify-center space-x-2 bg-gradient-to-r from-blue-600 to-indigo-600 text-white px-6 py-3 rounded-xl hover:from-blue-700 hover:to-indigo-700 disabled:opacity-50 transition font-medium"
+                  className="flex-1 flex items-center justify-center space-x-2 bg-blue-600 text-white px-4 py-2.5 rounded-lg hover:bg-blue-700 disabled:opacity-50 transition"
                 >
                   {isExtracting ? (
                     <>
-                      <Loader2 size={18} className="animate-spin" />
-                      <span>Extracting with AI...</span>
+                      <Loader2 size={16} className="animate-spin" />
+                      <span>Extracting...</span>
                     </>
                   ) : (
                     <>
-                      <Sparkles size={18} />
-                      <span>Extract Invoice Data</span>
+                      <Sparkles size={16} />
+                      <span>Extract Data</span>
                     </>
                   )}
                 </button>
               ) : (
                 <button
                   onClick={handleReset}
-                  className="flex-1 flex items-center justify-center space-x-2 border border-gray-300 text-gray-700 px-6 py-3 rounded-xl hover:bg-gray-50 transition font-medium"
+                  className="flex-1 flex items-center justify-center space-x-2 border border-gray-300 text-gray-600 px-4 py-2.5 rounded-lg hover:bg-gray-50 transition"
                 >
-                  <Upload size={18} />
-                  <span>Upload Different Invoice</span>
+                  <Upload size={16} />
+                  <span>Upload Different</span>
                 </button>
               )}
             </div>
 
             {extractedData && (
-              <p className="text-center text-sm text-gray-500">
-                Form has been pre-filled with extracted data. Please verify and edit if needed.
+              <p className="text-center text-xs text-gray-500">
+                Form pre-filled. Review and edit below.
               </p>
             )}
           </div>
