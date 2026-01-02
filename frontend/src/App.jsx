@@ -16,7 +16,7 @@ import BidReviewPage from './pages/buyer/BidReview';
 import BuyerAnalytics from './pages/buyer/Analytics';
 
 // Import Seller pages
-import { SellerDashboard, OfferDetailPage, DiscountOffersList } from './pages/seller/SellerPortal';
+import { SellerDashboard, OfferDetailPage, DiscountOffersList, GSTFinancing } from './pages/seller/SellerPortal';
 
 // Import Financier pages
 import FinancierDashboard from './pages/financier/Dashboard';
@@ -308,6 +308,14 @@ function AppRoutes() {
         element={
           <ProtectedRoute allowedRoles={['SELLER']}>
             <ContractsPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/seller/financing"
+        element={
+          <ProtectedRoute allowedRoles={['SELLER']}>
+            <GSTFinancing />
           </ProtectedRoute>
         }
       />

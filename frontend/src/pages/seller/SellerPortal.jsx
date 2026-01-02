@@ -217,17 +217,11 @@ export function SellerDashboard() {
             <Link to="/seller/invoices" className="flex items-center space-x-3 px-3 py-2.5 text-gray-700 hover:bg-gray-50 rounded-lg">
               <FileText size={20} /><span>My Invoices</span>
             </Link>
-            <Link to="/seller" className="flex items-center space-x-3 px-3 py-2.5 text-gray-700 hover:bg-gray-50 rounded-lg">
+            <Link to="/seller/financing" className="flex items-center space-x-3 px-3 py-2.5 text-gray-700 hover:bg-gray-50 rounded-lg">
               <CreditCard size={20} /><span>GST Financing</span>
-            </Link>
-            <Link to="/seller" className="flex items-center space-x-3 px-3 py-2.5 text-gray-700 hover:bg-gray-50 rounded-lg">
-              <Wallet size={20} /><span>Payments</span>
             </Link>
             <Link to="/seller/contracts" className="flex items-center space-x-3 px-3 py-2.5 text-gray-700 hover:bg-gray-50 rounded-lg">
               <FileText size={20} /><span>Contracts</span>
-            </Link>
-            <Link to="/seller" className="flex items-center space-x-3 px-3 py-2.5 text-gray-700 hover:bg-gray-50 rounded-lg">
-              <History size={20} /><span>Repayments</span>
             </Link>
           </nav>
         </aside>
@@ -375,14 +369,23 @@ export function SellerDashboard() {
 
           {/* Quick Actions */}
           <div className="mt-6 grid grid-cols-3 gap-4">
-            <button className="flex items-center justify-center space-x-3 bg-white border-2 border-gray-200 text-gray-700 py-4 px-6 rounded-xl hover:border-green-300 hover:bg-green-50 transition">
+            <button
+              onClick={() => navigate('/seller/financing')}
+              className="flex items-center justify-center space-x-3 bg-white border-2 border-gray-200 text-gray-700 py-4 px-6 rounded-xl hover:border-green-300 hover:bg-green-50 transition"
+            >
+              <CreditCard size={20} /><span className="font-medium">GST Financing</span>
+            </button>
+            <button
+              onClick={() => navigate('/seller/invoices/create?productType=GST_BACKED')}
+              className="flex items-center justify-center space-x-3 bg-white border-2 border-gray-200 text-gray-700 py-4 px-6 rounded-xl hover:border-green-300 hover:bg-green-50 transition"
+            >
               <FileText size={20} /><span className="font-medium">Upload Invoice for Financing</span>
             </button>
-            <button className="flex items-center justify-center space-x-3 bg-white border-2 border-gray-200 text-gray-700 py-4 px-6 rounded-xl hover:border-green-300 hover:bg-green-50 transition">
-              <Calculator size={20} /><span className="font-medium">Calculate Financing Cost</span>
-            </button>
-            <button className="flex items-center justify-center space-x-3 bg-white border-2 border-gray-200 text-gray-700 py-4 px-6 rounded-xl hover:border-green-300 hover:bg-green-50 transition">
-              <HelpCircle size={20} /><span className="font-medium">Help & Support</span>
+            <button
+              onClick={() => navigate('/seller/contracts')}
+              className="flex items-center justify-center space-x-3 bg-white border-2 border-gray-200 text-gray-700 py-4 px-6 rounded-xl hover:border-green-300 hover:bg-green-50 transition"
+            >
+              <FileText size={20} /><span className="font-medium">View Contracts</span>
             </button>
           </div>
         </main>
@@ -490,11 +493,11 @@ export function DiscountOffersList() {
             <Link to="/seller/invoices" className="flex items-center space-x-3 px-3 py-2.5 text-gray-700 hover:bg-gray-50 rounded-lg">
               <FileText size={20} /><span>My Invoices</span>
             </Link>
-            <Link to="/seller" className="flex items-center space-x-3 px-3 py-2.5 text-gray-700 hover:bg-gray-50 rounded-lg">
+            <Link to="/seller/financing" className="flex items-center space-x-3 px-3 py-2.5 text-gray-700 hover:bg-gray-50 rounded-lg">
               <CreditCard size={20} /><span>GST Financing</span>
             </Link>
-            <Link to="/seller" className="flex items-center space-x-3 px-3 py-2.5 text-gray-700 hover:bg-gray-50 rounded-lg">
-              <Wallet size={20} /><span>Payments</span>
+            <Link to="/seller/contracts" className="flex items-center space-x-3 px-3 py-2.5 text-gray-700 hover:bg-gray-50 rounded-lg">
+              <FileText size={20} /><span>Contracts</span>
             </Link>
           </nav>
         </aside>
@@ -931,6 +934,394 @@ export function OfferDetailPage() {
                   {processing ? <><Loader2 size={18} className="animate-spin mr-2" />Processing...</> : 'Reject'}
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ============ GST FINANCING PAGE ============
+export function GSTFinancing() {
+  const navigate = useNavigate();
+  const { user, profile } = useAuth();
+  const [loading, setLoading] = useState(true);
+  const [invoices, setInvoices] = useState([]);
+  const [selectedInvoice, setSelectedInvoice] = useState(null);
+  const [bids, setBids] = useState([]);
+  const [loadingBids, setLoadingBids] = useState(false);
+  const [acceptingBid, setAcceptingBid] = useState(null);
+  const [filter, setFilter] = useState('ALL');
+
+  const sellerInfo = profile?.seller || {};
+  const companyInitials = sellerInfo.companyName ? sellerInfo.companyName.substring(0, 2).toUpperCase() : 'SE';
+
+  useEffect(() => {
+    fetchInvoices();
+  }, [filter]);
+
+  const fetchInvoices = async () => {
+    try {
+      setLoading(true);
+      const response = await invoiceService.list({ productType: 'GST_BACKED' });
+      setInvoices(response.data || []);
+    } catch (error) {
+      console.error('Failed to fetch invoices:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchBids = async (invoiceId) => {
+    try {
+      setLoadingBids(true);
+      const response = await fetch(`/api/v1/bids/invoice/${invoiceId}`, {
+        headers: { Authorization: `Bearer ${localStorage.getItem('accessToken')}` }
+      });
+      const data = await response.json();
+      setBids(data.data || []);
+    } catch (error) {
+      console.error('Failed to fetch bids:', error);
+      setBids([]);
+    } finally {
+      setLoadingBids(false);
+    }
+  };
+
+  const handleViewBids = async (invoice) => {
+    setSelectedInvoice(invoice);
+    await fetchBids(invoice.id);
+  };
+
+  const handleAcceptBid = async (bidId) => {
+    if (!window.confirm('Are you sure you want to accept this bid? Other bids will be rejected.')) return;
+
+    try {
+      setAcceptingBid(bidId);
+      const response = await fetch(`/api/v1/bids/${bidId}/accept`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${localStorage.getItem('accessToken')}` }
+      });
+      if (!response.ok) throw new Error('Failed to accept bid');
+
+      // Refresh data
+      await fetchBids(selectedInvoice.id);
+      await fetchInvoices();
+      alert('Bid accepted! The financier will disburse funds shortly.');
+    } catch (error) {
+      console.error('Failed to accept bid:', error);
+      alert(error.message || 'Failed to accept bid');
+    } finally {
+      setAcceptingBid(null);
+    }
+  };
+
+  const handleOpenForBidding = async (invoiceId) => {
+    if (!window.confirm('Open this invoice for financier bidding?')) return;
+
+    try {
+      const response = await fetch(`/api/v1/invoices/${invoiceId}/open-bidding`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${localStorage.getItem('accessToken')}` }
+      });
+      if (!response.ok) throw new Error('Failed to open for bidding');
+      await fetchInvoices();
+      alert('Invoice is now open for bidding!');
+    } catch (error) {
+      console.error('Failed to open for bidding:', error);
+      alert(error.message || 'Failed to open for bidding');
+    }
+  };
+
+  const getStatusBadge = (status) => {
+    const styles = {
+      DRAFT: 'bg-gray-100 text-gray-700',
+      PENDING_ACCEPTANCE: 'bg-yellow-100 text-yellow-700',
+      ACCEPTED: 'bg-blue-100 text-blue-700',
+      OPEN_FOR_BIDDING: 'bg-purple-100 text-purple-700',
+      BID_SELECTED: 'bg-green-100 text-green-700',
+      DISBURSED: 'bg-green-100 text-green-700',
+      SETTLED: 'bg-gray-100 text-gray-700',
+    };
+    return styles[status] || 'bg-gray-100 text-gray-700';
+  };
+
+  const getStatusLabel = (status) => {
+    const labels = {
+      DRAFT: 'Draft',
+      PENDING_ACCEPTANCE: 'Pending',
+      ACCEPTED: 'Accepted',
+      OPEN_FOR_BIDDING: 'Open for Bids',
+      BID_SELECTED: 'Bid Selected',
+      DISBURSED: 'Funded',
+      SETTLED: 'Settled',
+    };
+    return labels[status] || status;
+  };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="flex items-center space-x-2 text-gray-600">
+          <Loader2 className="animate-spin" size={24} />
+          <span>Loading financing invoices...</span>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-gray-50">
+      {/* Header */}
+      <nav className="bg-white border-b border-gray-200 px-6 py-3">
+        <div className="flex items-center justify-between">
+          <Link to="/seller" className="flex items-center space-x-2">
+            <div className="w-8 h-8 bg-red-600 rounded-lg flex items-center justify-center">
+              <span className="text-white font-bold text-sm">CI</span>
+            </div>
+            <span className="text-xl font-bold text-gray-800">CRED<span className="text-red-600">INVOICE</span></span>
+            <span className="ml-2 px-2 py-0.5 bg-green-100 text-green-700 text-xs rounded-full font-medium">Seller</span>
+          </Link>
+          <div className="flex items-center space-x-4">
+            <NotificationDropdown />
+            <button onClick={() => navigate('/account')} className="p-2 text-gray-600 hover:bg-gray-100 rounded-lg">
+              <Settings size={20} />
+            </button>
+            <div className="flex items-center space-x-2 cursor-pointer hover:bg-gray-100 px-2 py-1 rounded-lg" onClick={() => navigate('/account')}>
+              <div className="w-8 h-8 bg-green-600 rounded-full flex items-center justify-center">
+                <span className="text-white text-sm font-medium">{companyInitials}</span>
+              </div>
+              <span className="text-sm font-medium text-gray-700">{sellerInfo.companyName || 'Seller'}</span>
+            </div>
+          </div>
+        </div>
+      </nav>
+
+      <div className="flex">
+        {/* Sidebar */}
+        <aside className="w-64 bg-white border-r border-gray-200 min-h-screen p-4">
+          <nav className="space-y-1">
+            <Link to="/seller" className="flex items-center space-x-3 px-3 py-2.5 text-gray-700 hover:bg-gray-50 rounded-lg">
+              <TrendingUp size={20} /><span>Dashboard</span>
+            </Link>
+            <Link to="/seller/discounts" className="flex items-center space-x-3 px-3 py-2.5 text-gray-700 hover:bg-gray-50 rounded-lg">
+              <Percent size={20} /><span>Discount Offers</span>
+            </Link>
+            <Link to="/seller/invoices" className="flex items-center space-x-3 px-3 py-2.5 text-gray-700 hover:bg-gray-50 rounded-lg">
+              <FileText size={20} /><span>My Invoices</span>
+            </Link>
+            <Link to="/seller/financing" className="flex items-center space-x-3 px-3 py-2.5 bg-green-50 text-green-700 rounded-lg font-medium">
+              <CreditCard size={20} /><span>GST Financing</span>
+            </Link>
+            <Link to="/seller/contracts" className="flex items-center space-x-3 px-3 py-2.5 text-gray-700 hover:bg-gray-50 rounded-lg">
+              <FileText size={20} /><span>Contracts</span>
+            </Link>
+          </nav>
+        </aside>
+
+        {/* Main Content */}
+        <main className="flex-1 p-6">
+          <div className="flex items-center justify-between mb-6">
+            <div>
+              <h1 className="text-2xl font-bold text-gray-800">GST-Backed Financing</h1>
+              <p className="text-gray-500 text-sm">Upload invoices and get financing from multiple financiers</p>
+            </div>
+            <button
+              onClick={() => navigate('/seller/invoices/create?productType=GST_BACKED')}
+              className="flex items-center space-x-2 bg-green-600 text-white px-4 py-2.5 rounded-lg hover:bg-green-700 font-medium"
+            >
+              <FileText size={18} />
+              <span>Upload Invoice for Financing</span>
+            </button>
+          </div>
+
+          {/* How It Works */}
+          <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 mb-6">
+            <h3 className="font-semibold text-blue-800 mb-2">How GST-Backed Financing Works</h3>
+            <div className="grid grid-cols-4 gap-4 text-sm">
+              <div className="flex items-start space-x-2">
+                <div className="w-6 h-6 bg-blue-600 text-white rounded-full flex items-center justify-center text-xs font-bold">1</div>
+                <p className="text-blue-700">Upload your GST invoice</p>
+              </div>
+              <div className="flex items-start space-x-2">
+                <div className="w-6 h-6 bg-blue-600 text-white rounded-full flex items-center justify-center text-xs font-bold">2</div>
+                <p className="text-blue-700">Open for financier bidding</p>
+              </div>
+              <div className="flex items-start space-x-2">
+                <div className="w-6 h-6 bg-blue-600 text-white rounded-full flex items-center justify-center text-xs font-bold">3</div>
+                <p className="text-blue-700">Compare bids & select best</p>
+              </div>
+              <div className="flex items-start space-x-2">
+                <div className="w-6 h-6 bg-blue-600 text-white rounded-full flex items-center justify-center text-xs font-bold">4</div>
+                <p className="text-blue-700">Receive funds & repay on due date</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Invoices List */}
+          {invoices.length === 0 ? (
+            <div className="bg-white rounded-xl border border-gray-200 p-12 text-center">
+              <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <CreditCard size={32} className="text-gray-400" />
+              </div>
+              <h3 className="text-lg font-semibold text-gray-800 mb-2">No financing invoices yet</h3>
+              <p className="text-gray-500 mb-4">Upload your first invoice to get financing from multiple financiers.</p>
+              <button
+                onClick={() => navigate('/seller/invoices/create?productType=GST_BACKED')}
+                className="bg-green-600 text-white px-6 py-2.5 rounded-lg hover:bg-green-700 font-medium"
+              >
+                Upload Invoice
+              </button>
+            </div>
+          ) : (
+            <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+              <div className="p-4 border-b border-gray-100 flex items-center justify-between">
+                <h2 className="font-semibold text-gray-800">Your Financing Invoices</h2>
+                <div className="flex space-x-2">
+                  {['ALL', 'OPEN_FOR_BIDDING', 'BID_SELECTED', 'DISBURSED'].map((f) => (
+                    <button
+                      key={f}
+                      onClick={() => setFilter(f)}
+                      className={`px-3 py-1.5 text-sm rounded-lg ${filter === f ? 'bg-green-100 text-green-700' : 'text-gray-600 hover:bg-gray-100'}`}
+                    >
+                      {f === 'ALL' ? 'All' : getStatusLabel(f)}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div className="divide-y divide-gray-100">
+                {invoices.filter(inv => filter === 'ALL' || inv.status === filter).map((invoice) => (
+                  <div key={invoice.id} className="p-4 hover:bg-gray-50">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center space-x-4">
+                        <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center">
+                          <CreditCard size={24} className="text-purple-600" />
+                        </div>
+                        <div>
+                          <p className="font-medium text-gray-800">{invoice.invoiceNumber}</p>
+                          <p className="text-sm text-gray-500">{invoice.buyerName || 'Unknown Buyer'}</p>
+                        </div>
+                      </div>
+                      <div className="text-center">
+                        <p className="text-lg font-bold text-gray-800">₹{(invoice.totalAmount / 100000).toFixed(2)}L</p>
+                        <p className="text-xs text-gray-500">Invoice Amount</p>
+                      </div>
+                      <div className="text-center">
+                        <p className="text-sm text-gray-800">Due: {new Date(invoice.dueDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}</p>
+                      </div>
+                      <div>
+                        <span className={`px-3 py-1 text-xs rounded-full font-medium ${getStatusBadge(invoice.status)}`}>
+                          {getStatusLabel(invoice.status)}
+                        </span>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        {invoice.status === 'ACCEPTED' && (
+                          <button
+                            onClick={() => handleOpenForBidding(invoice.id)}
+                            className="px-4 py-2 bg-purple-600 text-white text-sm rounded-lg hover:bg-purple-700"
+                          >
+                            Open for Bidding
+                          </button>
+                        )}
+                        {invoice.status === 'OPEN_FOR_BIDDING' && (
+                          <button
+                            onClick={() => handleViewBids(invoice)}
+                            className="px-4 py-2 bg-green-600 text-white text-sm rounded-lg hover:bg-green-700"
+                          >
+                            View Bids
+                          </button>
+                        )}
+                        {invoice.status === 'BID_SELECTED' && (
+                          <span className="text-green-600 text-sm font-medium">Awaiting Disbursement</span>
+                        )}
+                        {invoice.status === 'DISBURSED' && (
+                          <span className="text-green-600 text-sm font-medium">Funded ✓</span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </main>
+      </div>
+
+      {/* Bids Modal */}
+      {selectedInvoice && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-2xl w-full max-w-3xl mx-4 max-h-[80vh] overflow-hidden">
+            <div className="p-6 border-b border-gray-200">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-xl font-semibold text-gray-800">Financing Bids</h3>
+                  <p className="text-gray-500 text-sm">Invoice: {selectedInvoice.invoiceNumber} • ₹{selectedInvoice.totalAmount?.toLocaleString('en-IN')}</p>
+                </div>
+                <button onClick={() => { setSelectedInvoice(null); setBids([]); }} className="p-2 hover:bg-gray-100 rounded-lg">
+                  <X size={20} className="text-gray-500" />
+                </button>
+              </div>
+            </div>
+            <div className="p-6 overflow-y-auto max-h-[60vh]">
+              {loadingBids ? (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="animate-spin text-gray-400" size={32} />
+                </div>
+              ) : bids.length === 0 ? (
+                <div className="text-center py-8">
+                  <Clock size={48} className="text-gray-300 mx-auto mb-4" />
+                  <p className="text-gray-500">No bids yet. Financiers will bid soon!</p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {bids.map((bid, index) => {
+                    const netAmount = bid.netAmount || (selectedInvoice.totalAmount - (selectedInvoice.totalAmount * (bid.haircutPercentage || 0) / 100) - (bid.processingFee || 0));
+                    return (
+                      <div key={bid.id} className={`border rounded-xl p-4 ${index === 0 ? 'border-green-300 bg-green-50' : 'border-gray-200'}`}>
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center space-x-4">
+                            <div className={`w-12 h-12 rounded-lg flex items-center justify-center ${index === 0 ? 'bg-green-200' : 'bg-gray-100'}`}>
+                              <Building2 size={24} className={index === 0 ? 'text-green-700' : 'text-gray-500'} />
+                            </div>
+                            <div>
+                              <div className="flex items-center space-x-2">
+                                <p className="font-semibold text-gray-800">{bid.financier?.companyName || 'Financier'}</p>
+                                {index === 0 && <span className="bg-green-600 text-white text-xs px-2 py-0.5 rounded-full">Best Offer</span>}
+                              </div>
+                              <p className="text-sm text-gray-500">
+                                Rate: {bid.discountRate}% p.a. • Haircut: {bid.haircutPercentage || 0}%
+                                {bid.processingFee > 0 && ` • Fee: ₹${bid.processingFee.toLocaleString('en-IN')}`}
+                              </p>
+                            </div>
+                          </div>
+                          <div className="text-right">
+                            <p className="text-lg font-bold text-gray-800">₹{netAmount.toLocaleString('en-IN')}</p>
+                            <p className="text-xs text-gray-500">You'll receive</p>
+                          </div>
+                          <div>
+                            {bid.status === 'PENDING' && (
+                              <button
+                                onClick={() => handleAcceptBid(bid.id)}
+                                disabled={acceptingBid === bid.id}
+                                className="px-4 py-2 bg-green-600 text-white text-sm rounded-lg hover:bg-green-700 disabled:opacity-50"
+                              >
+                                {acceptingBid === bid.id ? <Loader2 size={16} className="animate-spin" /> : 'Accept'}
+                              </button>
+                            )}
+                            {bid.status === 'ACCEPTED' && (
+                              <span className="text-green-600 font-medium">Accepted ✓</span>
+                            )}
+                            {bid.status === 'REJECTED' && (
+                              <span className="text-gray-400">Rejected</span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           </div>
         </div>
