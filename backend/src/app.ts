@@ -1,9 +1,20 @@
 import express, { Express } from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
+import * as fs from 'fs';
+import * as path from 'path';
 import { env } from './config/env';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler';
 import { API_PREFIX } from './config/constants';
+
+// Ensure upload directories exist
+const uploadDirs = ['./uploads/invoices', './uploads/kyc'];
+uploadDirs.forEach(dir => {
+  if (!fs.existsSync(dir)) {
+    fs.mkdirSync(dir, { recursive: true });
+    console.log(`Created upload directory: ${dir}`);
+  }
+});
 
 // Import routes
 import authRoutes from './modules/auth/auth.routes';

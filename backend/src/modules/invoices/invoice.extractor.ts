@@ -6,6 +6,7 @@
  */
 
 import { extractInvoiceWithGroq, isValidGstin, ExtractedInvoiceData } from '../../services/groq.service';
+import { AppError } from '../../middleware/errorHandler';
 
 export interface ExtractedField<T> {
   value: T;
@@ -178,26 +179,9 @@ export async function extractInvoiceFromFile(
   } catch (error: any) {
     console.error('Invoice extraction failed:', error);
 
-    // Return failed extraction with empty fields
-    return {
-      success: false,
-      extractionId,
-      overallConfidence: 0,
-      fields: {
-        invoiceNumber: { value: '', confidence: 0 },
-        invoiceDate: { value: '', confidence: 0 },
-        dueDate: { value: '', confidence: 0 },
-        sellerGstin: { value: null, confidence: 0 },
-        sellerName: { value: '', confidence: 0 },
-        buyerGstin: { value: null, confidence: 0 },
-        buyerName: { value: '', confidence: 0 },
-        subtotal: { value: 0, confidence: 0 },
-        taxAmount: { value: 0, confidence: 0 },
-        totalAmount: { value: 0, confidence: 0 },
-      },
-      validationResults: [],
-      flagsForReview: ['all'],
-    };
+    // Throw AppError with the actual error message so it's visible in production
+    const errorMessage = error.message || 'Failed to extract invoice data';
+    throw new AppError(errorMessage, 400);
   }
 }
 

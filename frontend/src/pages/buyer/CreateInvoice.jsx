@@ -57,24 +57,32 @@ const AIExtractionSection = ({ onExtracted, onManualEntry }) => {
 
     try {
       const response = await invoiceService.extractFromFile(file);
-      const data = response.data;
-      setExtractedData(data);
+      const result = response.data;
+
+      // Check if extraction was successful
+      if (!result || !result.success) {
+        throw new Error('Failed to extract invoice data from the image');
+      }
+
+      // Extract flat values from the nested fields structure
+      const fields = result.fields || {};
+      const extractedValues = {
+        invoiceNumber: fields.invoiceNumber?.value || '',
+        invoiceDate: fields.invoiceDate?.value || '',
+        dueDate: fields.dueDate?.value || '',
+        sellerName: fields.sellerName?.value || '',
+        sellerGstin: fields.sellerGstin?.value || '',
+        buyerName: fields.buyerName?.value || '',
+        buyerGstin: fields.buyerGstin?.value || '',
+        subtotal: fields.subtotal?.value || 0,
+        taxAmount: fields.taxAmount?.value || 0,
+        totalAmount: fields.totalAmount?.value || 0,
+      };
+
+      setExtractedData(extractedValues);
 
       // Pass extracted data to parent
-      if (data) {
-        onExtracted({
-          invoiceNumber: data.invoiceNumber || '',
-          invoiceDate: data.invoiceDate || '',
-          dueDate: data.dueDate || '',
-          sellerName: data.sellerName || '',
-          sellerGstin: data.sellerGstin || '',
-          buyerName: data.buyerName || '',
-          buyerGstin: data.buyerGstin || '',
-          subtotal: data.subtotal || 0,
-          taxAmount: data.taxAmount || 0,
-          totalAmount: data.totalAmount || 0,
-        });
-      }
+      onExtracted(extractedValues);
     } catch (err) {
       console.error('AI extraction failed:', err);
       setError(err.message || 'Failed to extract invoice data. Please try again or enter manually.');
