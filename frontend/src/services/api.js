@@ -92,6 +92,12 @@ export const profileService = {
     return apiRequest(`/profile/sellers${params}`);
   },
 
+  // Get verified buyers for GST-backed financing (seller creates invoice)
+  getVerifiedBuyers: (search = '') => {
+    const params = search ? `?search=${encodeURIComponent(search)}` : '';
+    return apiRequest(`/profile/buyers${params}`);
+  },
+
   // Create seller referral
   createSellerReferral: (data) =>
     apiRequest('/profile/referrals', {

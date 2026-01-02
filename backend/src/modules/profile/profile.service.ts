@@ -390,6 +390,39 @@ export class ProfileService {
     return sellers;
   }
 
+  // Get verified buyers for dropdown (used by sellers for GST-backed financing)
+  async getVerifiedBuyers(search?: string) {
+    const where: any = {};
+
+    // For production, uncomment this:
+    // where.kycStatus = 'APPROVED';
+
+    if (search) {
+      where.OR = [
+        { companyName: { contains: search, mode: 'insensitive' } },
+        { gstin: { contains: search, mode: 'insensitive' } },
+      ];
+    }
+
+    const buyers = await prisma.buyer.findMany({
+      where,
+      select: {
+        id: true,
+        userId: true,
+        companyName: true,
+        gstin: true,
+        industry: true,
+        city: true,
+        state: true,
+        kycStatus: true,
+      },
+      orderBy: { companyName: 'asc' },
+      take: 50,
+    });
+
+    return buyers;
+  }
+
   // Create a seller referral (when seller is not in the system)
   async createSellerReferral(
     referrerId: string,

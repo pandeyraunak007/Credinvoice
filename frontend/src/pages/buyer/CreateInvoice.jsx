@@ -476,6 +476,193 @@ const SellerSearchDropdown = ({ value, onChange, onAddNew, error }) => {
   );
 };
 
+// Buyer Search Dropdown Component (for Sellers creating GST-backed invoices)
+const BuyerSearchDropdown = ({ value, onChange, error }) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const [search, setSearch] = useState('');
+  const [buyers, setBuyers] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [fetchError, setFetchError] = useState(null);
+  const dropdownRef = useRef(null);
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target)) {
+        setIsOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  // Fetch buyers function
+  const fetchBuyers = useCallback(async (searchTerm = '') => {
+    console.log('[BuyerDropdown] Starting fetch, search:', searchTerm);
+    setLoading(true);
+    setFetchError(null);
+    try {
+      const response = await profileService.getVerifiedBuyers(searchTerm);
+      console.log('[BuyerDropdown] API Response:', response);
+      const buyersList = response?.data || [];
+      console.log('[BuyerDropdown] Buyers list:', buyersList);
+      setBuyers(buyersList);
+    } catch (err) {
+      console.error('[BuyerDropdown] Fetch error:', err);
+      setFetchError(err.message);
+      setBuyers([]);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  // Fetch when dropdown opens
+  useEffect(() => {
+    if (isOpen) {
+      console.log('[BuyerDropdown] Dropdown opened, fetching buyers...');
+      fetchBuyers(search);
+    }
+  }, [isOpen]);
+
+  // Fetch on search change (with debounce)
+  useEffect(() => {
+    if (!isOpen || search === '') return;
+
+    const timer = setTimeout(() => {
+      fetchBuyers(search);
+    }, 300);
+
+    return () => clearTimeout(timer);
+  }, [search]);
+
+  const handleSelect = (buyer) => {
+    console.log('[BuyerDropdown] Selected buyer:', buyer);
+    onChange(buyer);
+    setIsOpen(false);
+    setSearch('');
+  };
+
+  const handleOpen = () => {
+    console.log('[BuyerDropdown] Toggle dropdown, current isOpen:', isOpen);
+    setIsOpen(!isOpen);
+  };
+
+  return (
+    <div className="relative" ref={dropdownRef}>
+      <div
+        className={`w-full px-4 py-3 border rounded-lg cursor-pointer flex items-center justify-between ${
+          error ? 'border-red-300 bg-red-50' : 'border-gray-300 hover:border-gray-400'
+        } ${value ? 'bg-green-50 border-green-300' : ''}`}
+        onClick={handleOpen}
+      >
+        {value ? (
+          <div className="flex items-center space-x-3">
+            <div className="w-8 h-8 bg-green-100 rounded-full flex items-center justify-center">
+              <Building2 size={16} className="text-green-600" />
+            </div>
+            <div>
+              <p className="font-medium text-gray-800">{value.companyName}</p>
+              <p className="text-xs text-gray-500 font-mono">{value.gstin}</p>
+            </div>
+          </div>
+        ) : (
+          <span className="text-gray-400">Click to select a buyer...</span>
+        )}
+        <ChevronDown size={20} className={`text-gray-400 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+      </div>
+
+      {isOpen && (
+        <div
+          className="absolute left-0 right-0 mt-1 bg-white border border-gray-200 rounded-xl shadow-2xl"
+          style={{ zIndex: 9999, top: '100%' }}
+        >
+          {/* Search Input */}
+          <div className="p-3 border-b border-gray-100 bg-gray-50 rounded-t-xl">
+            <div className="relative">
+              <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+              <input
+                type="text"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Type to search by name or GSTIN..."
+                className="w-full pl-10 pr-4 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white"
+                autoFocus
+                onClick={(e) => e.stopPropagation()}
+              />
+            </div>
+          </div>
+
+          {/* Buyers List */}
+          <div className="max-h-72 overflow-y-auto">
+            {fetchError ? (
+              <div className="py-6 text-center text-red-500">
+                <AlertCircle size={24} className="mx-auto mb-2" />
+                <p className="text-sm font-medium">Failed to load buyers</p>
+                <p className="text-xs mt-1">{fetchError}</p>
+                <button
+                  onClick={() => fetchBuyers('')}
+                  className="mt-2 text-blue-600 text-sm hover:underline"
+                >
+                  Try again
+                </button>
+              </div>
+            ) : loading ? (
+              <div className="py-8 text-center text-gray-500">
+                <Loader2 size={24} className="animate-spin mx-auto mb-2" />
+                <p className="text-sm">Loading buyers...</p>
+              </div>
+            ) : buyers.length > 0 ? (
+              <div className="py-1">
+                <div className="px-4 py-2 text-xs font-medium text-gray-500 uppercase tracking-wider bg-gray-50">
+                  Available Buyers ({buyers.length})
+                </div>
+                {buyers.map((buyer) => (
+                  <div
+                    key={buyer.id}
+                    className="px-4 py-3 hover:bg-blue-50 cursor-pointer flex items-center justify-between border-b border-gray-50 last:border-0"
+                    onClick={() => handleSelect(buyer)}
+                  >
+                    <div className="flex items-center space-x-3">
+                      <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
+                        <Building2 size={18} className="text-blue-600" />
+                      </div>
+                      <div>
+                        <p className="font-medium text-gray-800">{buyer.companyName}</p>
+                        <p className="text-xs text-gray-500">
+                          {buyer.gstin ? (
+                            <span className="font-mono bg-gray-100 px-1.5 py-0.5 rounded">{buyer.gstin}</span>
+                          ) : (
+                            <span className="text-gray-400">No GSTIN</span>
+                          )}
+                          {buyer.city && <span className="ml-2">{buyer.city}, {buyer.state}</span>}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      {buyer.kycStatus === 'APPROVED' && (
+                        <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full">Verified</span>
+                      )}
+                      <ChevronDown size={16} className="text-gray-300 -rotate-90" />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="py-8 text-center">
+                <Building2 size={32} className="text-gray-300 mx-auto mb-3" />
+                <p className="text-gray-500 font-medium mb-1">No buyers found</p>
+                <p className="text-sm text-gray-400">
+                  {search ? `No results for "${search}"` : 'No verified buyers available'}
+                </p>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
 // Line Item Row Component
 const LineItemRow = ({ item, index, onChange, onRemove, canRemove }) => {
   const handleChange = (field, value) => {
@@ -826,22 +1013,27 @@ export default function CreateInvoice() {
   const [showDiscountConfirmModal, setShowDiscountConfirmModal] = useState(false);
   const [errors, setErrors] = useState({});
 
+  // Determine if user is a seller (for GST-backed financing flow)
+  const isSeller = user?.userType === 'SELLER';
+
   // AI extraction mode state
   const [showAISection, setShowAISection] = useState(true);
   const [hasExtractedData, setHasExtractedData] = useState(false);
 
-  // Get buyer info from profile
+  // Get buyer/seller info from profile based on user type
   const buyerInfo = profile?.buyer || {};
+  const sellerInfo = profile?.seller || {};
 
-  // Form state
+  // Form state - default productType based on user type
   const [invoiceData, setInvoiceData] = useState({
     invoiceNumber: '',
     invoiceDate: new Date().toISOString().split('T')[0],
     dueDate: '',
-    productType: 'DD_EARLY_PAYMENT',
+    productType: isSeller ? 'GST_BACKED' : 'DD_EARLY_PAYMENT',
   });
 
   const [selectedSeller, setSelectedSeller] = useState(null);
+  const [selectedBuyer, setSelectedBuyer] = useState(null); // For seller flow
 
   const [lineItems, setLineItems] = useState([
     { description: '', hsnCode: '', quantity: '', rate: '', amount: '0.00' }
@@ -940,9 +1132,19 @@ export default function CreateInvoice() {
     if (!invoiceData.invoiceNumber) newErrors.invoiceNumber = 'Invoice number is required';
     if (!invoiceData.invoiceDate) newErrors.invoiceDate = 'Invoice date is required';
     if (!invoiceData.dueDate) newErrors.dueDate = 'Due date is required';
-    if (!selectedSeller) newErrors.seller = 'Please select a seller';
-    if (!selectedSeller?.companyName) newErrors.seller = 'Seller name is required';
-    if (!buyerInfo.companyName) newErrors.buyer = 'Buyer company name is missing in profile';
+
+    // Validate based on user type
+    if (isSeller) {
+      // Seller creating GST-backed invoice
+      if (!selectedBuyer) newErrors.buyer = 'Please select a buyer';
+      if (!selectedBuyer?.companyName) newErrors.buyer = 'Buyer name is required';
+      if (!sellerInfo.companyName) newErrors.seller = 'Seller company name is missing in profile';
+    } else {
+      // Buyer creating DD invoice
+      if (!selectedSeller) newErrors.seller = 'Please select a seller';
+      if (!selectedSeller?.companyName) newErrors.seller = 'Seller name is required';
+      if (!buyerInfo.companyName) newErrors.buyer = 'Buyer company name is missing in profile';
+    }
 
     const subtotal = parseFloat(amounts.subtotal) || 0;
     const totalAmount = parseFloat(amounts.totalAmount) || 0;
@@ -961,8 +1163,8 @@ export default function CreateInvoice() {
       }
     }
 
-    // Validate discount offer if enabled
-    if (enableDiscount) {
+    // Validate discount offer if enabled (only for buyers, sellers use bidding)
+    if (!isSeller && enableDiscount) {
       const discountPct = parseFloat(discountOffer.discountPercentage);
       if (!discountPct || discountPct <= 0 || discountPct > 50) {
         newErrors.discountPercentage = 'Discount must be between 0.1% and 50%';
@@ -989,13 +1191,13 @@ export default function CreateInvoice() {
   const handleSubmit = async (asDraft = false) => {
     if (!asDraft && !validateForm()) return;
 
-    // If discount is enabled and not a draft, show confirmation modal first
-    if (!asDraft && enableDiscount) {
+    // If discount is enabled and not a draft, show confirmation modal first (only for buyers)
+    if (!isSeller && !asDraft && enableDiscount) {
       setShowDiscountConfirmModal(true);
       return;
     }
 
-    // For drafts or non-discount submissions, proceed directly
+    // For drafts, seller submissions, or non-discount submissions, proceed directly
     await executeSubmit(asDraft);
   };
 
@@ -1004,20 +1206,43 @@ export default function CreateInvoice() {
     setSubmitError(null);
 
     try {
-      const data = {
-        invoiceNumber: invoiceData.invoiceNumber,
-        invoiceDate: invoiceData.invoiceDate,
-        dueDate: invoiceData.dueDate,
-        sellerGstin: selectedSeller?.gstin || null,
-        sellerName: selectedSeller?.companyName || '',
-        sellerId: selectedSeller?.id || null, // Direct seller ID for proper linking
-        buyerGstin: buyerInfo.gstin || null,
-        buyerName: buyerInfo.companyName || '',
-        subtotal: parseFloat(amounts.subtotal) || 0,
-        taxAmount: (parseFloat(amounts.cgst) || 0) + (parseFloat(amounts.sgst) || 0) + (parseFloat(amounts.igst) || 0),
-        totalAmount: parseFloat(amounts.totalAmount) || 0,
-        productType: invoiceData.productType,
-      };
+      // Build data based on user type
+      let data;
+
+      if (isSeller) {
+        // Seller creating GST-backed invoice - seller info from profile, buyer from dropdown
+        data = {
+          invoiceNumber: invoiceData.invoiceNumber,
+          invoiceDate: invoiceData.invoiceDate,
+          dueDate: invoiceData.dueDate,
+          sellerGstin: sellerInfo.gstin || null,
+          sellerName: sellerInfo.companyName || '',
+          sellerId: sellerInfo.id || null,
+          buyerGstin: selectedBuyer?.gstin || null,
+          buyerName: selectedBuyer?.companyName || '',
+          buyerId: selectedBuyer?.id || null,
+          subtotal: parseFloat(amounts.subtotal) || 0,
+          taxAmount: (parseFloat(amounts.cgst) || 0) + (parseFloat(amounts.sgst) || 0) + (parseFloat(amounts.igst) || 0),
+          totalAmount: parseFloat(amounts.totalAmount) || 0,
+          productType: 'GST_BACKED', // Always GST_BACKED for seller-created invoices
+        };
+      } else {
+        // Buyer creating DD invoice - buyer info from profile, seller from dropdown
+        data = {
+          invoiceNumber: invoiceData.invoiceNumber,
+          invoiceDate: invoiceData.invoiceDate,
+          dueDate: invoiceData.dueDate,
+          sellerGstin: selectedSeller?.gstin || null,
+          sellerName: selectedSeller?.companyName || '',
+          sellerId: selectedSeller?.id || null,
+          buyerGstin: buyerInfo.gstin || null,
+          buyerName: buyerInfo.companyName || '',
+          subtotal: parseFloat(amounts.subtotal) || 0,
+          taxAmount: (parseFloat(amounts.cgst) || 0) + (parseFloat(amounts.sgst) || 0) + (parseFloat(amounts.igst) || 0),
+          totalAmount: parseFloat(amounts.totalAmount) || 0,
+          productType: invoiceData.productType,
+        };
+      }
 
       // 1. Create the invoice
       const response = await invoiceService.create(data);
@@ -1027,8 +1252,8 @@ export default function CreateInvoice() {
         throw new Error('Failed to create invoice - no ID returned');
       }
 
-      // 2. Create discount offer if enabled and not draft
-      if (!asDraft && enableDiscount) {
+      // 2. Create discount offer if enabled and not draft (only for buyers)
+      if (!isSeller && !asDraft && enableDiscount) {
         try {
           await discountService.createOffer({
             invoiceId: invoiceId,
@@ -1042,7 +1267,8 @@ export default function CreateInvoice() {
       }
 
       setShowDiscountConfirmModal(false);
-      navigate('/invoices');
+      // Redirect based on user type
+      navigate(isSeller ? '/seller/invoices' : '/invoices');
     } catch (error) {
       console.error('Failed to create invoice:', error);
       setSubmitError(error.message || 'Failed to create invoice');
@@ -1099,15 +1325,19 @@ export default function CreateInvoice() {
         <div className="max-w-5xl mx-auto px-6 py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-4">
-              <button onClick={() => navigate('/invoices')} className="p-2 hover:bg-gray-100 rounded-lg">
+              <button onClick={() => navigate(isSeller ? '/seller/invoices' : '/invoices')} className="p-2 hover:bg-gray-100 rounded-lg">
                 <ArrowLeft size={20} className="text-gray-600" />
               </button>
               <div>
                 <h1 className="text-xl font-bold text-gray-800">Create New Invoice</h1>
-                <p className="text-sm text-gray-500">Enter invoice details for dynamic discounting</p>
+                <p className="text-sm text-gray-500">
+                  {isSeller
+                    ? 'Create an invoice for GST-backed financing'
+                    : 'Enter invoice details for dynamic discounting'}
+                </p>
               </div>
             </div>
-            <button onClick={() => navigate('/invoices')} className="p-2 hover:bg-gray-100 rounded-lg">
+            <button onClick={() => navigate(isSeller ? '/seller/invoices' : '/invoices')} className="p-2 hover:bg-gray-100 rounded-lg">
               <X size={20} className="text-gray-500" />
             </button>
           </div>
@@ -1188,89 +1418,180 @@ export default function CreateInvoice() {
             </div>
           </FormSection>
 
-          {/* Seller Information Section */}
-          <FormSection title="Seller Information" icon={Building2} allowOverflow={true}>
-            <FormField
-              label="Select Seller"
-              required
-              error={errors.seller}
-              hint="Choose from your verified sellers or invite a new one"
-            >
-              <SellerSearchDropdown
-                value={selectedSeller}
-                onChange={setSelectedSeller}
-                onAddNew={() => setShowReferralModal(true)}
+          {/* For Buyers: Seller Selection Section */}
+          {!isSeller && (
+            <FormSection title="Seller Information" icon={Building2} allowOverflow={true}>
+              <FormField
+                label="Select Seller"
+                required
                 error={errors.seller}
-              />
-            </FormField>
+                hint="Choose from your verified sellers or invite a new one"
+              >
+                <SellerSearchDropdown
+                  value={selectedSeller}
+                  onChange={setSelectedSeller}
+                  onAddNew={() => setShowReferralModal(true)}
+                  error={errors.seller}
+                />
+              </FormField>
 
-            {selectedSeller && (
-              <div className="mt-4 p-4 bg-gray-50 rounded-lg">
-                <div className="grid grid-cols-3 gap-4 text-sm">
-                  <div>
-                    <p className="text-gray-500">Business Type</p>
-                    <p className="font-medium text-gray-800">{selectedSeller.businessType || 'N/A'}</p>
-                  </div>
-                  <div>
-                    <p className="text-gray-500">Location</p>
-                    <p className="font-medium text-gray-800">
-                      {selectedSeller.city && selectedSeller.state
-                        ? `${selectedSeller.city}, ${selectedSeller.state}`
-                        : 'N/A'}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-gray-500">KYC Status</p>
-                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                      <CheckCircle size={12} className="mr-1" /> Verified
-                    </span>
+              {selectedSeller && (
+                <div className="mt-4 p-4 bg-gray-50 rounded-lg">
+                  <div className="grid grid-cols-3 gap-4 text-sm">
+                    <div>
+                      <p className="text-gray-500">Business Type</p>
+                      <p className="font-medium text-gray-800">{selectedSeller.businessType || 'N/A'}</p>
+                    </div>
+                    <div>
+                      <p className="text-gray-500">Location</p>
+                      <p className="font-medium text-gray-800">
+                        {selectedSeller.city && selectedSeller.state
+                          ? `${selectedSeller.city}, ${selectedSeller.state}`
+                          : 'N/A'}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-gray-500">KYC Status</p>
+                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                        <CheckCircle size={12} className="mr-1" /> Verified
+                      </span>
+                    </div>
                   </div>
                 </div>
-              </div>
-            )}
-          </FormSection>
+              )}
+            </FormSection>
+          )}
 
-          {/* Buyer Information Section (Pre-filled) */}
-          <FormSection title="Buyer Information (Your Company)" icon={User}>
-            <div className="grid grid-cols-2 gap-6">
-              <FormField label="Company Name">
-                <input
-                  type="text"
-                  value={buyerInfo.companyName || ''}
-                  readOnly
-                  className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-lg text-gray-700"
+          {/* For Sellers: Buyer Selection Section */}
+          {isSeller && (
+            <FormSection title="Buyer Information" icon={Building2} allowOverflow={true}>
+              <FormField
+                label="Select Buyer"
+                required
+                error={errors.buyer}
+                hint="Choose the buyer for this GST-backed invoice"
+              >
+                <BuyerSearchDropdown
+                  value={selectedBuyer}
+                  onChange={setSelectedBuyer}
+                  error={errors.buyer}
                 />
               </FormField>
-              <FormField label="GSTIN">
-                <input
-                  type="text"
-                  value={buyerInfo.gstin || ''}
-                  readOnly
-                  className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-lg text-gray-700 font-mono"
-                />
-              </FormField>
-              <FormField label="Address">
-                <input
-                  type="text"
-                  value={buyerInfo.address || ''}
-                  readOnly
-                  className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-lg text-gray-700"
-                />
-              </FormField>
-              <FormField label="Contact">
-                <input
-                  type="text"
-                  value={buyerInfo.contactName || ''}
-                  readOnly
-                  className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-lg text-gray-700"
-                />
-              </FormField>
-            </div>
-            <p className="mt-3 text-xs text-gray-500 flex items-center">
-              <Info size={14} className="mr-1" />
-              This information is from your profile. Update it in Settings if needed.
-            </p>
-          </FormSection>
+
+              {selectedBuyer && (
+                <div className="mt-4 p-4 bg-gray-50 rounded-lg">
+                  <div className="grid grid-cols-3 gap-4 text-sm">
+                    <div>
+                      <p className="text-gray-500">Industry</p>
+                      <p className="font-medium text-gray-800">{selectedBuyer.industry || 'N/A'}</p>
+                    </div>
+                    <div>
+                      <p className="text-gray-500">Location</p>
+                      <p className="font-medium text-gray-800">
+                        {selectedBuyer.city && selectedBuyer.state
+                          ? `${selectedBuyer.city}, ${selectedBuyer.state}`
+                          : 'N/A'}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-gray-500">KYC Status</p>
+                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                        <CheckCircle size={12} className="mr-1" /> Verified
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </FormSection>
+          )}
+
+          {/* For Buyers: Buyer Information Section (Pre-filled from profile) */}
+          {!isSeller && (
+            <FormSection title="Buyer Information (Your Company)" icon={User}>
+              <div className="grid grid-cols-2 gap-6">
+                <FormField label="Company Name">
+                  <input
+                    type="text"
+                    value={buyerInfo.companyName || ''}
+                    readOnly
+                    className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-lg text-gray-700"
+                  />
+                </FormField>
+                <FormField label="GSTIN">
+                  <input
+                    type="text"
+                    value={buyerInfo.gstin || ''}
+                    readOnly
+                    className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-lg text-gray-700 font-mono"
+                  />
+                </FormField>
+                <FormField label="Address">
+                  <input
+                    type="text"
+                    value={buyerInfo.address || ''}
+                    readOnly
+                    className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-lg text-gray-700"
+                  />
+                </FormField>
+                <FormField label="Contact">
+                  <input
+                    type="text"
+                    value={buyerInfo.contactName || ''}
+                    readOnly
+                    className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-lg text-gray-700"
+                  />
+                </FormField>
+              </div>
+              <p className="mt-3 text-xs text-gray-500 flex items-center">
+                <Info size={14} className="mr-1" />
+                This information is from your profile. Update it in Settings if needed.
+              </p>
+            </FormSection>
+          )}
+
+          {/* For Sellers: Seller Information Section (Pre-filled from profile) */}
+          {isSeller && (
+            <FormSection title="Seller Information (Your Company)" icon={User}>
+              <div className="grid grid-cols-2 gap-6">
+                <FormField label="Company Name">
+                  <input
+                    type="text"
+                    value={sellerInfo.companyName || ''}
+                    readOnly
+                    className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-lg text-gray-700"
+                  />
+                </FormField>
+                <FormField label="GSTIN">
+                  <input
+                    type="text"
+                    value={sellerInfo.gstin || ''}
+                    readOnly
+                    className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-lg text-gray-700 font-mono"
+                  />
+                </FormField>
+                <FormField label="Address">
+                  <input
+                    type="text"
+                    value={sellerInfo.address || ''}
+                    readOnly
+                    className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-lg text-gray-700"
+                  />
+                </FormField>
+                <FormField label="Contact">
+                  <input
+                    type="text"
+                    value={sellerInfo.contactName || ''}
+                    readOnly
+                    className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-lg text-gray-700"
+                  />
+                </FormField>
+              </div>
+              <p className="mt-3 text-xs text-gray-500 flex items-center">
+                <Info size={14} className="mr-1" />
+                This information is from your profile. Update it in Settings if needed.
+              </p>
+            </FormSection>
+          )}
 
           {/* Line Items Section */}
           <FormSection title="Items Details" icon={Package}>
@@ -1377,7 +1698,8 @@ export default function CreateInvoice() {
             </div>
           </FormSection>
 
-          {/* Discount Offer Section */}
+          {/* Discount Offer Section - Only for Buyers (DD flow) */}
+          {!isSeller && (
           <FormSection title="Early Payment Discount Offer" icon={Zap}>
             <div className="space-y-6">
               {/* Enable/Disable Toggle */}
@@ -1479,6 +1801,7 @@ export default function CreateInvoice() {
               )}
             </div>
           </FormSection>
+          )}
 
           {/* Attachments Section */}
           <FormSection title="Attachments" icon={Paperclip}>
@@ -1537,7 +1860,7 @@ export default function CreateInvoice() {
         )}
         <div className="max-w-5xl mx-auto flex items-center justify-between">
           <button
-            onClick={() => navigate('/invoices')}
+            onClick={() => navigate(isSeller ? '/seller/invoices' : '/invoices')}
             className="px-6 py-2.5 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 font-medium"
           >
             Cancel
@@ -1565,7 +1888,13 @@ export default function CreateInvoice() {
               ) : (
                 <>
                   <Send size={18} />
-                  <span>{enableDiscount ? 'Submit with Discount Offer' : 'Submit Invoice'}</span>
+                  <span>
+                    {isSeller
+                      ? 'Submit for Financing'
+                      : enableDiscount
+                        ? 'Submit with Discount Offer'
+                        : 'Submit Invoice'}
+                  </span>
                 </>
               )}
             </button>

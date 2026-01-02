@@ -120,6 +120,18 @@ export const getVerifiedSellers = asyncHandler(async (req: Request, res: Respons
   return sendSuccess(res, sellers);
 });
 
+// Get verified buyers (for seller GST-backed financing)
+export const getVerifiedBuyers = asyncHandler(async (req: Request, res: Response) => {
+  if (!req.user) {
+    return sendError(res, 'Not authenticated', 401);
+  }
+
+  const { search } = req.query;
+  const buyers = await profileService.getVerifiedBuyers(search as string | undefined);
+
+  return sendSuccess(res, buyers);
+});
+
 // Create seller referral
 export const createSellerReferral = asyncHandler(async (req: Request, res: Response) => {
   if (!req.user) {

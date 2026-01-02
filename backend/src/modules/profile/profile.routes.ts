@@ -17,6 +17,7 @@ import {
   deleteBankAccount,
   setPrimaryBankAccount,
   getVerifiedSellers,
+  getVerifiedBuyers,
   createSellerReferral,
   getMyReferrals,
 } from './profile.controller';
@@ -61,6 +62,9 @@ router.post('/bank-accounts/:accountId/set-primary', setPrimaryBankAccount);
 
 // Verified sellers routes (for buyer invoice creation)
 router.get('/sellers', getVerifiedSellers);
+
+// Verified buyers routes (for seller GST-backed financing)
+router.get('/buyers', getVerifiedBuyers);
 
 // Seller referral routes
 router.get('/referrals', getMyReferrals);
