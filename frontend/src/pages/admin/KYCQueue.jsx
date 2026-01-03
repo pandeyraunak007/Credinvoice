@@ -1,12 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import {
-  Search, Filter, Building2, User, Clock, CheckCircle, XCircle,
-  AlertCircle, Eye, ChevronRight, RefreshCw, Download, Calendar,
-  FileText, Shield, TrendingUp, BarChart3, Users, Bell, Loader, LogOut
+  Search, Building2, Clock, CheckCircle, XCircle,
+  AlertCircle, RefreshCw, FileText, Users, Loader
 } from 'lucide-react';
-import { adminService, authService } from '../../services/api';
-import { useAuth } from '../../context/AuthContext';
+import AdminLayout from '../../components/AdminLayout';
+import { adminService } from '../../services/api';
 
 const StatusBadge = ({ status }) => {
   const config = {
@@ -32,7 +31,6 @@ const EntityTypeBadge = ({ type }) => {
 
 export default function AdminKYCQueue() {
   const navigate = useNavigate();
-  const { logout } = useAuth();
   const [activeTab, setActiveTab] = useState('all');
   const [searchTerm, setSearchTerm] = useState('');
   const [filterEntityType, setFilterEntityType] = useState('all');
@@ -94,12 +92,6 @@ export default function AdminKYCQueue() {
     return true;
   });
 
-  const handleLogout = () => {
-    authService.logout();
-    logout();
-    navigate('/login');
-  };
-
   const formatDate = (dateStr) => {
     if (!dateStr) return '-';
     return new Date(dateStr).toLocaleDateString('en-IN', {
@@ -112,85 +104,22 @@ export default function AdminKYCQueue() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <nav className="bg-white border-b border-gray-200 px-6 py-3">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center space-x-2">
-            <div className="w-8 h-8 bg-red-600 rounded-lg flex items-center justify-center">
-              <span className="text-white font-bold text-sm">CI</span>
-            </div>
-            <span className="text-xl font-bold text-gray-800">CRED<span className="text-red-600">INVOICE</span></span>
-            <span className="ml-2 px-2 py-0.5 bg-gray-800 text-white text-xs rounded-full font-medium">Admin</span>
-          </div>
-          <div className="flex items-center space-x-4">
-            <button className="relative p-2 text-gray-600 hover:bg-gray-100 rounded-lg">
-              <Bell size={20} />
-              {stats.pending > 0 && (
-                <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white text-xs rounded-full flex items-center justify-center">
-                  {stats.pending}
-                </span>
-              )}
-            </button>
-            <div className="flex items-center space-x-2">
-              <div className="w-8 h-8 bg-gray-800 rounded-full flex items-center justify-center">
-                <span className="text-white text-sm font-medium">AD</span>
-              </div>
-              <span className="text-sm font-medium text-gray-700">Admin</span>
-            </div>
-            <button
-              onClick={handleLogout}
-              className="p-2 text-gray-600 hover:bg-gray-100 rounded-lg"
-              title="Logout"
-            >
-              <LogOut size={20} />
-            </button>
-          </div>
+    <AdminLayout>
+      <div className="flex items-center justify-between mb-6">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-800">KYC Review Queue</h1>
+          <p className="text-gray-500 text-sm">Review and approve KYC applications</p>
         </div>
-      </nav>
-
-      <div className="flex">
-        {/* Sidebar */}
-        <aside className="w-64 bg-white border-r border-gray-200 min-h-screen p-4">
-          <nav className="space-y-1">
-            <Link to="/admin" className="flex items-center space-x-3 px-3 py-2.5 text-gray-700 hover:bg-gray-50 rounded-lg">
-              <TrendingUp size={20} /><span>Dashboard</span>
-            </Link>
-            <Link to="/admin/kyc" className="flex items-center space-x-3 px-3 py-2.5 bg-gray-100 text-gray-900 rounded-lg font-medium">
-              <Shield size={20} /><span>KYC Review</span>
-              {stats.pending > 0 && (
-                <span className="ml-auto bg-yellow-100 text-yellow-700 text-xs px-2 py-0.5 rounded-full">{stats.pending}</span>
-              )}
-            </Link>
-            <Link to="/admin/users" className="flex items-center space-x-3 px-3 py-2.5 text-gray-700 hover:bg-gray-50 rounded-lg">
-              <Users size={20} /><span>Users</span>
-            </Link>
-            <Link to="/admin/invoices" className="flex items-center space-x-3 px-3 py-2.5 text-gray-700 hover:bg-gray-50 rounded-lg">
-              <FileText size={20} /><span>Invoices</span>
-            </Link>
-            <Link to="/admin/reports" className="flex items-center space-x-3 px-3 py-2.5 text-gray-700 hover:bg-gray-50 rounded-lg">
-              <BarChart3 size={20} /><span>Reports</span>
-            </Link>
-          </nav>
-        </aside>
-
-        {/* Main Content */}
-        <main className="flex-1 p-6">
-          <div className="flex items-center justify-between mb-6">
-            <div>
-              <h1 className="text-2xl font-bold text-gray-800">KYC Review Queue</h1>
-              <p className="text-gray-500 text-sm">Review and approve KYC applications</p>
-            </div>
-            <div className="flex items-center space-x-3">
-              <button
-                onClick={fetchApplications}
-                className="flex items-center space-x-2 px-3 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
-              >
-                <RefreshCw size={18} className={loading ? 'animate-spin' : ''} />
-                <span>Refresh</span>
-              </button>
-            </div>
-          </div>
+        <div className="flex items-center space-x-3">
+          <button
+            onClick={fetchApplications}
+            className="flex items-center space-x-2 px-3 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
+          >
+            <RefreshCw size={18} className={loading ? 'animate-spin' : ''} />
+            <span>Refresh</span>
+          </button>
+        </div>
+      </div>
 
           {/* Stats Cards */}
           <div className="grid grid-cols-4 gap-4 mb-6">
@@ -386,8 +315,6 @@ export default function AdminKYCQueue() {
               </div>
             )}
           </div>
-        </main>
-      </div>
-    </div>
+    </AdminLayout>
   );
 }

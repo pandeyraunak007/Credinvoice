@@ -30,8 +30,13 @@ import KYCOnboarding from './pages/kyc/KYCOnboarding';
 import KYCStatus from './pages/kyc/KYCStatus';
 
 // Import Admin pages
+import AdminDashboard from './pages/admin/Dashboard';
 import AdminKYCQueue from './pages/admin/KYCQueue';
 import KYCReviewDetail from './pages/admin/KYCReviewDetail';
+import AdminUsers from './pages/admin/Users';
+import AdminInvoices from './pages/admin/Invoices';
+import AdminTransactions from './pages/admin/Transactions';
+import AdminAuditLogs from './pages/admin/AuditLogs';
 
 // Import Shared pages
 import Account from './components/Account';
@@ -86,7 +91,7 @@ function ProtectedRoute({ children, allowedRoles = [], requireKYC = true }) {
       BUYER: '/dashboard',
       SELLER: '/seller',
       FINANCIER: '/financier',
-      ADMIN: '/admin/kyc',
+      ADMIN: '/admin',
     };
     return <Navigate to={dashboardRoutes[user.userType] || '/dashboard'} replace />;
   }
@@ -131,7 +136,7 @@ function KYCRoute({ children }) {
       BUYER: '/dashboard',
       SELLER: '/seller',
       FINANCIER: '/financier',
-      ADMIN: '/admin/kyc',
+      ADMIN: '/admin',
     };
     return <Navigate to={dashboardRoutes[user.userType] || '/dashboard'} replace />;
   }
@@ -158,7 +163,7 @@ function PublicRoute({ children }) {
       BUYER: '/dashboard',
       SELLER: '/seller',
       FINANCIER: '/financier',
-      ADMIN: '/admin/kyc',
+      ADMIN: '/admin',
     };
     return <Navigate to={dashboardRoutes[user.userType] || '/dashboard'} replace />;
   }
@@ -413,6 +418,14 @@ function AppRoutes() {
 
       {/* Admin Routes */}
       <Route
+        path="/admin"
+        element={
+          <ProtectedRoute allowedRoles={['ADMIN']} requireKYC={false}>
+            <AdminDashboard />
+          </ProtectedRoute>
+        }
+      />
+      <Route
         path="/admin/kyc"
         element={
           <ProtectedRoute allowedRoles={['ADMIN']} requireKYC={false}>
@@ -425,6 +438,38 @@ function AppRoutes() {
         element={
           <ProtectedRoute allowedRoles={['ADMIN']} requireKYC={false}>
             <KYCReviewDetail />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/admin/users"
+        element={
+          <ProtectedRoute allowedRoles={['ADMIN']} requireKYC={false}>
+            <AdminUsers />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/admin/invoices"
+        element={
+          <ProtectedRoute allowedRoles={['ADMIN']} requireKYC={false}>
+            <AdminInvoices />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/admin/transactions"
+        element={
+          <ProtectedRoute allowedRoles={['ADMIN']} requireKYC={false}>
+            <AdminTransactions />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/admin/audit-logs"
+        element={
+          <ProtectedRoute allowedRoles={['ADMIN']} requireKYC={false}>
+            <AdminAuditLogs />
           </ProtectedRoute>
         }
       />
