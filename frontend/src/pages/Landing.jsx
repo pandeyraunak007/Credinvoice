@@ -42,10 +42,10 @@ function Navbar() {
         </Link>
 
         <div className="hidden md:flex items-center gap-8">
-          <a href="#products" className="text-slate-400 hover:text-white transition">Products</a>
-          <a href="#how-it-works" className="text-slate-400 hover:text-white transition">How It Works</a>
-          <a href="#security" className="text-slate-400 hover:text-white transition">Security</a>
-          <a href="#" className="text-slate-400 hover:text-white transition">Pricing</a>
+          <Link to="/products" className="text-slate-400 hover:text-white transition">Products</Link>
+          <Link to="/pricing" className="text-slate-400 hover:text-white transition">Pricing</Link>
+          <Link to="/blog" className="text-slate-400 hover:text-white transition">Blog</Link>
+          <Link to="/about" className="text-slate-400 hover:text-white transition">About</Link>
         </div>
 
         <div className="flex items-center gap-4">
@@ -759,6 +759,24 @@ function CTASection() {
 
 // ============ FOOTER ============
 function Footer() {
+  const footerLinks = {
+    Product: [
+      { label: 'Dynamic Discounting', href: '/products/dynamic-discounting' },
+      { label: 'Invoice Financing', href: '/products/invoice-financing' },
+      { label: 'Pricing', href: '/pricing' },
+    ],
+    Company: [
+      { label: 'About Us', href: '/about' },
+      { label: 'Blog', href: '/blog' },
+      { label: 'Contact', href: 'mailto:contact@credinvoice.com' },
+    ],
+    Legal: [
+      { label: 'Privacy Policy', href: '/privacy' },
+      { label: 'Terms of Service', href: '/terms' },
+      { label: 'Security', href: '/security' },
+    ],
+  };
+
   return (
     <footer className="border-t border-slate-800 py-12 px-6">
       <div className="max-w-7xl mx-auto">
@@ -771,28 +789,33 @@ function Footer() {
               <span className="text-xl font-bold">CredInvoice</span>
             </Link>
             <p className="text-slate-400 text-sm max-w-xs mb-4">
-              Supply Chain Finance for a Self-Reliant India. Built in India 🇮🇳
+              Supply Chain Finance for a Self-Reliant India. Built in India
             </p>
             <div className="flex gap-4">
-              {['X', 'in', '▶'].map((icon, i) => (
-                <a key={i} href="#" className="w-10 h-10 bg-slate-800 rounded-lg flex items-center justify-center text-slate-400 hover:text-white hover:bg-slate-700 transition text-sm">
-                  {icon}
-                </a>
-              ))}
+              <a href="https://twitter.com/credinvoice" target="_blank" rel="noopener noreferrer" className="w-10 h-10 bg-slate-800 rounded-lg flex items-center justify-center text-slate-400 hover:text-white hover:bg-slate-700 transition text-sm">
+                X
+              </a>
+              <a href="https://linkedin.com/company/credinvoice" target="_blank" rel="noopener noreferrer" className="w-10 h-10 bg-slate-800 rounded-lg flex items-center justify-center text-slate-400 hover:text-white hover:bg-slate-700 transition text-sm">
+                in
+              </a>
             </div>
           </div>
 
-          {[
-            { title: 'Product', links: ['Dynamic Discounting', 'Invoice Financing', 'API Docs'] },
-            { title: 'Company', links: ['About Us', 'Careers', 'Blog'] },
-            { title: 'Legal', links: ['Privacy Policy', 'Terms of Service', 'Security'] },
-          ].map((col, i) => (
-            <div key={i}>
-              <h4 className="font-semibold mb-4">{col.title}</h4>
+          {Object.entries(footerLinks).map(([title, links]) => (
+            <div key={title}>
+              <h4 className="font-semibold mb-4">{title}</h4>
               <ul className="space-y-3">
-                {col.links.map((link, j) => (
-                  <li key={j}>
-                    <a href="#" className="text-slate-400 hover:text-white transition text-sm">{link}</a>
+                {links.map((link) => (
+                  <li key={link.href}>
+                    {link.href.startsWith('mailto:') ? (
+                      <a href={link.href} className="text-slate-400 hover:text-white transition text-sm">
+                        {link.label}
+                      </a>
+                    ) : (
+                      <Link to={link.href} className="text-slate-400 hover:text-white transition text-sm">
+                        {link.label}
+                      </Link>
+                    )}
                   </li>
                 ))}
               </ul>
@@ -802,7 +825,7 @@ function Footer() {
 
         <div className="border-t border-slate-800 pt-8 flex flex-col md:flex-row justify-between items-center gap-4">
           <p className="text-slate-500 text-sm">
-            &copy; 2025 CredInvoice Technologies Pvt. Ltd. All rights reserved.
+            &copy; {new Date().getFullYear()} CredInvoice Technologies Pvt. Ltd. All rights reserved.
           </p>
           <p className="text-slate-600 text-xs">
             MSME Invoice Financing &bull; Dynamic Discounting Platform &bull; GST Invoice Financing

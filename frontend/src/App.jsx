@@ -42,6 +42,18 @@ import ContractDetailPage from './pages/shared/ContractDetailPage';
 // Import Landing page
 import Landing from './pages/Landing';
 
+// Import Public pages
+import About from './pages/public/About';
+import Blog from './pages/public/Blog';
+import BlogPost from './pages/public/BlogPost';
+import Privacy from './pages/public/Privacy';
+import Terms from './pages/public/Terms';
+import Security from './pages/public/Security';
+import Products from './pages/public/Products';
+import DynamicDiscounting from './pages/public/DynamicDiscounting';
+import InvoiceFinancing from './pages/public/InvoiceFinancing';
+import Pricing from './pages/public/Pricing';
+
 // Loading Spinner Component
 function LoadingSpinner() {
   return (
@@ -160,6 +172,18 @@ function AppRoutes() {
     <Routes>
       {/* Landing Page - Public */}
       <Route path="/" element={<Landing />} />
+
+      {/* Public Pages - No Auth Required */}
+      <Route path="/about" element={<About />} />
+      <Route path="/blog" element={<Blog />} />
+      <Route path="/blog/:slug" element={<BlogPost />} />
+      <Route path="/privacy" element={<Privacy />} />
+      <Route path="/terms" element={<Terms />} />
+      <Route path="/security" element={<Security />} />
+      <Route path="/products" element={<Products />} />
+      <Route path="/products/dynamic-discounting" element={<DynamicDiscounting />} />
+      <Route path="/products/invoice-financing" element={<InvoiceFinancing />} />
+      <Route path="/pricing" element={<Pricing />} />
 
       {/* Public Auth Routes */}
       <Route
