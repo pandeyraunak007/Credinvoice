@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import {
   Search, Filter, Download, Plus, FileText, Clock, CheckCircle,
@@ -8,6 +8,8 @@ import {
 } from 'lucide-react';
 import { invoiceService, discountService } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
+import InvoiceFilters from '../../components/InvoiceFilters';
+import { SellerPerformanceBadge } from '../../components/PerformanceBadge';
 
 const statusConfig = {
   DRAFT: { label: 'Draft', color: 'bg-gray-100 text-gray-700', icon: FileText },
@@ -289,10 +291,8 @@ export default function InvoicesPage() {
   const [invoices, setInvoices] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState('all');
-  const [counterpartyFilter, setCounterpartyFilter] = useState('all');
-  const [showFilters, setShowFilters] = useState(false);
+  const [filters, setFilters] = useState({});
+  const [pagination, setPagination] = useState({ page: 1, limit: 20, total: 0, totalPages: 0 });
   const [selectedInvoices, setSelectedInvoices] = useState([]);
 
   // Funding type modal state
@@ -303,40 +303,35 @@ export default function InvoicesPage() {
   const [bulkDiscountModal, setBulkDiscountModal] = useState(false);
   const [bulkDiscountLoading, setBulkDiscountLoading] = useState(false);
 
-  const fetchInvoices = async () => {
+  const fetchInvoices = useCallback(async (filterParams = {}) => {
     try {
       setLoading(true);
       setError(null);
-      const response = await invoiceService.list();
+      const response = await invoiceService.list(filterParams);
       setInvoices(response.data || []);
+      if (response.pagination) {
+        setPagination(response.pagination);
+      }
     } catch (err) {
       console.error('Failed to fetch invoices:', err);
       setError(err.message || 'Failed to load invoices');
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
+
+  // Handle filter changes from InvoiceFilters component
+  const handleFilterChange = useCallback((newFilters) => {
+    setFilters(newFilters);
+    fetchInvoices(newFilters);
+  }, [fetchInvoices]);
 
   useEffect(() => {
     fetchInvoices();
-  }, []);
+  }, [fetchInvoices]);
 
-  // For sellers, show buyers; for buyers, show sellers
-  const uniqueCounterparties = [...new Set(invoices.map(inv =>
-    isSeller ? inv.buyerName : inv.sellerName
-  ).filter(Boolean))];
-
-  const filteredInvoices = invoices
-    .filter(inv => {
-      if (statusFilter !== 'all' && inv.status !== statusFilter) return false;
-      const counterpartyName = isSeller ? inv.buyerName : inv.sellerName;
-      if (counterpartyFilter !== 'all' && counterpartyName !== counterpartyFilter) return false;
-      const searchLower = searchTerm.toLowerCase();
-      if (searchTerm &&
-          !inv.invoiceNumber?.toLowerCase().includes(searchLower) &&
-          !counterpartyName?.toLowerCase().includes(searchLower)) return false;
-      return true;
-    });
+  // Use invoices directly since filtering is done server-side
+  const filteredInvoices = invoices;
 
   const formatCurrency = (amount) => {
     if (amount >= 100000) return `₹${(amount / 100000).toFixed(2)}L`;
@@ -696,49 +691,14 @@ export default function InvoicesPage() {
           </div>
         </div>
 
-        {/* Search and Filters */}
+        {/* Advanced Search and Filters */}
+        <InvoiceFilters
+          onFilterChange={handleFilterChange}
+          showAdvanced={true}
+          className="mb-6"
+        />
+
         <div className="bg-white rounded-xl border border-gray-200 shadow-sm mb-6">
-          <div className="p-4 border-b border-gray-100">
-            <div className="flex items-center space-x-4">
-              <div className="flex-1 relative">
-                <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-                <input
-                  type="text"
-                  placeholder={`Search by Invoice ID or ${isSeller ? 'Buyer' : 'Seller'}...`}
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                />
-              </div>
-              <select
-                value={statusFilter}
-                onChange={(e) => setStatusFilter(e.target.value)}
-                className="border border-gray-300 rounded-lg px-3 py-2 bg-white min-w-[180px]"
-              >
-                <option value="all">All Statuses</option>
-                <option value="draft">Draft</option>
-                <option value="pending_acceptance">Pending Acceptance</option>
-                <option value="accepted">Accepted</option>
-                <option value="open_for_bidding">Open for Bidding</option>
-                <option value="disbursed">Disbursed</option>
-                <option value="settled">Settled</option>
-              </select>
-              <select
-                value={counterpartyFilter}
-                onChange={(e) => setCounterpartyFilter(e.target.value)}
-                className="border border-gray-300 rounded-lg px-3 py-2 bg-white min-w-[180px]"
-              >
-                <option value="all">All {isSeller ? 'Buyers' : 'Sellers'}</option>
-                {uniqueCounterparties.map(name => (
-                  <option key={name} value={name}>{name}</option>
-                ))}
-              </select>
-              <button className="flex items-center space-x-2 px-3 py-2 border border-gray-300 rounded-lg hover:bg-gray-50">
-                <Download size={18} />
-                <span>Export</span>
-              </button>
-            </div>
-          </div>
 
           {/* Bulk Action Bar - Only for buyers */}
           {isBuyer && selectedInvoices.length > 0 && (
@@ -863,7 +823,12 @@ export default function InvoicesPage() {
                         </td>
                         <td className="px-4 py-4">
                           <div>
-                            <p className="font-medium text-gray-800">{counterpartyName || 'N/A'}</p>
+                            <div className="flex items-center space-x-2">
+                              <p className="font-medium text-gray-800">{counterpartyName || 'N/A'}</p>
+                              {!isSeller && invoice.sellerId && (
+                                <SellerPerformanceBadge sellerId={invoice.sellerId} size="sm" />
+                              )}
+                            </div>
                             <p className="text-sm text-gray-500 font-mono">{counterpartyGstin}</p>
                           </div>
                         </td>

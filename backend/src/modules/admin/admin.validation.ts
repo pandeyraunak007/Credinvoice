@@ -9,7 +9,7 @@ export const listUsersQuerySchema = z.object({
   limit: z.string().transform(Number).default('20'),
 });
 
-// List invoices query (admin view)
+// List invoices query (admin view) with advanced filtering
 export const listInvoicesQuerySchema = z.object({
   status: z.enum([
     'DRAFT',
@@ -24,6 +24,19 @@ export const listInvoicesQuerySchema = z.object({
     'CANCELLED',
   ]).optional(),
   productType: z.enum(['DYNAMIC_DISCOUNTING', 'DD_EARLY_PAYMENT', 'GST_BACKED']).optional(),
+  // Advanced search
+  search: z.string().optional(),
+  // Amount range
+  minAmount: z.string().transform(Number).optional(),
+  maxAmount: z.string().transform(Number).optional(),
+  // Date filtering
+  dateField: z.enum(['createdAt', 'dueDate']).default('createdAt'),
+  startDate: z.string().transform((str) => new Date(str)).optional(),
+  endDate: z.string().transform((str) => new Date(str)).optional(),
+  // Sorting
+  sortBy: z.enum(['createdAt', 'dueDate', 'totalAmount']).default('createdAt'),
+  sortOrder: z.enum(['asc', 'desc']).default('desc'),
+  // Pagination
   page: z.string().transform(Number).default('1'),
   limit: z.string().transform(Number).default('20'),
 });

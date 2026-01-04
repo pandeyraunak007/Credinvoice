@@ -238,3 +238,71 @@ export const getAdminInvoiceDistribution = async (req: Request, res: Response, n
     next(error);
   }
 };
+
+// ============================================
+// PERFORMANCE METRICS
+// ============================================
+
+/**
+ * Get seller performance metrics
+ */
+export const getSellerPerformanceMetrics = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const sellerId = req.params.sellerId;
+    const data = await analyticsService.getSellerMetrics(sellerId);
+    res.json({ success: true, data });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Get buyer reliability metrics
+ */
+export const getBuyerReliabilityMetrics = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const buyerId = req.params.buyerId;
+    const data = await analyticsService.getBuyerMetrics(buyerId);
+    res.json({ success: true, data });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Refresh all metrics (admin only)
+ */
+export const refreshAllMetrics = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const data = await analyticsService.refreshAllMetrics();
+    res.json({ success: true, data, message: 'Metrics refresh completed' });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Get top performing sellers
+ */
+export const getTopPerformingSellers = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const limit = parseInt(req.query.limit as string) || 10;
+    const data = await analyticsService.getTopPerformingSellers(limit);
+    res.json({ success: true, data });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Get top reliable buyers
+ */
+export const getTopReliableBuyers = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const limit = parseInt(req.query.limit as string) || 10;
+    const data = await analyticsService.getTopReliableBuyers(limit);
+    res.json({ success: true, data });
+  } catch (error) {
+    next(error);
+  }
+};

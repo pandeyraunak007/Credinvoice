@@ -521,6 +521,22 @@ export const analyticsService = {
 
   getAdminInvoiceDistribution: (period = 'month') =>
     apiRequest(`/analytics/admin/invoice-distribution?period=${period}`),
+
+  // Performance Metrics
+  getSellerMetrics: (sellerId) =>
+    apiRequest(`/analytics/metrics/seller/${sellerId}`),
+
+  getBuyerMetrics: (buyerId) =>
+    apiRequest(`/analytics/metrics/buyer/${buyerId}`),
+
+  getTopPerformingSellers: (limit = 10) =>
+    apiRequest(`/analytics/metrics/top-sellers?limit=${limit}`),
+
+  getTopReliableBuyers: (limit = 10) =>
+    apiRequest(`/analytics/metrics/top-buyers?limit=${limit}`),
+
+  refreshAllMetrics: () =>
+    apiRequest('/analytics/metrics/refresh', { method: 'POST' }),
 };
 
 // Notification Service

@@ -22,6 +22,12 @@ import {
   getAdminUserGrowth,
   getAdminKycFunnel,
   getAdminInvoiceDistribution,
+  // Performance Metrics
+  getSellerPerformanceMetrics,
+  getBuyerReliabilityMetrics,
+  refreshAllMetrics,
+  getTopPerformingSellers,
+  getTopReliableBuyers,
 } from './analytics.controller';
 
 const router = Router();
@@ -61,5 +67,23 @@ router.get('/admin/platform-summary', adminOnly, getAdminPlatformSummary);
 router.get('/admin/user-growth', adminOnly, getAdminUserGrowth);
 router.get('/admin/kyc-funnel', adminOnly, getAdminKycFunnel);
 router.get('/admin/invoice-distribution', adminOnly, getAdminInvoiceDistribution);
+
+// ============================================
+// PERFORMANCE METRICS - /api/v1/analytics/metrics/*
+// ============================================
+// Get seller performance metrics (accessible to all authenticated users)
+router.get('/metrics/seller/:sellerId', getSellerPerformanceMetrics);
+
+// Get buyer reliability metrics (accessible to all authenticated users)
+router.get('/metrics/buyer/:buyerId', getBuyerReliabilityMetrics);
+
+// Get top performing sellers (accessible to buyers and financiers for decision making)
+router.get('/metrics/top-sellers', getTopPerformingSellers);
+
+// Get top reliable buyers (accessible to sellers for decision making)
+router.get('/metrics/top-buyers', getTopReliableBuyers);
+
+// Admin: Refresh all metrics
+router.post('/metrics/refresh', adminOnly, refreshAllMetrics);
 
 export default router;

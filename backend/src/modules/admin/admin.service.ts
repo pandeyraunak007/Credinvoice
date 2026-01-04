@@ -186,14 +186,59 @@ export class AdminService {
     return updated;
   }
 
-  // List all invoices (admin view)
+  // List all invoices (admin view) with advanced filtering
   async listInvoices(query: ListInvoicesQuery) {
-    const { status, productType, page, limit } = query;
+    const {
+      status,
+      productType,
+      search,
+      minAmount,
+      maxAmount,
+      dateField,
+      startDate,
+      endDate,
+      sortBy,
+      sortOrder,
+      page,
+      limit,
+    } = query;
     const skip = (page - 1) * limit;
 
     const where: any = {};
+
+    // Basic filters
     if (status) where.status = status;
     if (productType) where.productType = productType;
+
+    // Multi-field search (invoice number, seller name, buyer name)
+    if (search) {
+      where.OR = [
+        { invoiceNumber: { contains: search, mode: 'insensitive' } },
+        { sellerName: { contains: search, mode: 'insensitive' } },
+        { buyerName: { contains: search, mode: 'insensitive' } },
+        { seller: { companyName: { contains: search, mode: 'insensitive' } } },
+        { buyer: { companyName: { contains: search, mode: 'insensitive' } } },
+      ];
+    }
+
+    // Amount range filter
+    if (minAmount !== undefined || maxAmount !== undefined) {
+      where.totalAmount = {};
+      if (minAmount !== undefined) where.totalAmount.gte = minAmount;
+      if (maxAmount !== undefined) where.totalAmount.lte = maxAmount;
+    }
+
+    // Date range filter (user can choose createdAt or dueDate)
+    if (startDate || endDate) {
+      const dateColumn = dateField || 'createdAt';
+      where[dateColumn] = {};
+      if (startDate) where[dateColumn].gte = startDate;
+      if (endDate) where[dateColumn].lte = endDate;
+    }
+
+    // Dynamic sorting
+    const orderByField = sortBy || 'createdAt';
+    const orderByDirection = sortOrder || 'desc';
 
     const [invoices, total] = await Promise.all([
       prisma.invoice.findMany({
@@ -205,7 +250,7 @@ export class AdminService {
           bids: { select: { id: true, status: true } },
           disbursement: { select: { status: true, amount: true } },
         },
-        orderBy: { createdAt: 'desc' },
+        orderBy: { [orderByField]: orderByDirection },
         skip,
         take: limit,
       }),

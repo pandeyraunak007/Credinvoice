@@ -1,10 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import {
-  Search, FileText, Clock, CheckCircle, XCircle, AlertCircle,
-  RefreshCw, Loader, IndianRupee, TrendingUp, Filter, Building2, ExternalLink
+  FileText, Clock, CheckCircle, XCircle, AlertCircle,
+  RefreshCw, Loader, IndianRupee, Building2, ExternalLink
 } from 'lucide-react';
 import AdminLayout from '../../components/AdminLayout';
+import InvoiceFilters from '../../components/InvoiceFilters';
 import { adminService } from '../../services/api';
 
 const StatusBadge = ({ status }) => {
@@ -169,44 +170,39 @@ export default function AdminInvoices() {
   const [invoices, setInvoices] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [filterStatus, setFilterStatus] = useState('all');
-  const [filterType, setFilterType] = useState('all');
+  const [filters, setFilters] = useState({});
+  const [pagination, setPagination] = useState({ page: 1, limit: 20, total: 0, totalPages: 0 });
   const [selectedInvoice, setSelectedInvoice] = useState(null);
 
-  const fetchInvoices = async () => {
+  const fetchInvoices = useCallback(async (filterParams = {}) => {
     setLoading(true);
     setError(null);
     try {
-      const params = {};
-      if (filterStatus !== 'all') params.status = filterStatus;
-      if (filterType !== 'all') params.productType = filterType;
-
-      const response = await adminService.getInvoices(params);
+      const response = await adminService.getInvoices(filterParams);
       setInvoices(response.data || []);
+      if (response.pagination) {
+        setPagination(response.pagination);
+      }
     } catch (err) {
       console.error('Failed to fetch invoices:', err);
       setError(err.message || 'Failed to load invoices');
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
+
+  // Handle filter changes from InvoiceFilters component
+  const handleFilterChange = useCallback((newFilters) => {
+    setFilters(newFilters);
+    fetchInvoices(newFilters);
+  }, [fetchInvoices]);
 
   useEffect(() => {
     fetchInvoices();
-  }, [filterStatus, filterType]);
+  }, [fetchInvoices]);
 
-  const filteredInvoices = invoices.filter(invoice => {
-    if (searchTerm) {
-      const search = searchTerm.toLowerCase();
-      return (
-        invoice.invoiceNumber?.toLowerCase().includes(search) ||
-        invoice.seller?.profile?.companyName?.toLowerCase().includes(search) ||
-        invoice.buyer?.profile?.companyName?.toLowerCase().includes(search)
-      );
-    }
-    return true;
-  });
+  // Use invoices directly since filtering is done server-side
+  const filteredInvoices = invoices;
 
   const formatDate = (dateStr) => {
     if (!dateStr) return '-';
@@ -284,46 +280,15 @@ export default function AdminInvoices() {
         </div>
       )}
 
-      {/* Filters */}
+      {/* Advanced Search and Filters */}
+      <InvoiceFilters
+        onFilterChange={handleFilterChange}
+        showAdvanced={true}
+        className="mb-6"
+      />
+
+      {/* Invoice Table Container */}
       <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
-          <div className="relative">
-            <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-            <input
-              type="text"
-              placeholder="Search by invoice #, seller, buyer..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-10 pr-4 py-2 border border-gray-300 rounded-lg w-72"
-            />
-          </div>
-          <div className="flex items-center space-x-3">
-            <select
-              value={filterStatus}
-              onChange={(e) => setFilterStatus(e.target.value)}
-              className="px-3 py-2 border border-gray-300 rounded-lg bg-white"
-            >
-              <option value="all">All Status</option>
-              <option value="DRAFT">Draft</option>
-              <option value="SUBMITTED">Submitted</option>
-              <option value="ACCEPTED">Accepted</option>
-              <option value="OPEN_FOR_BIDDING">Open for Bidding</option>
-              <option value="BID_ACCEPTED">Bid Accepted</option>
-              <option value="FINANCED">Financed</option>
-              <option value="REPAID">Repaid</option>
-            </select>
-            <select
-              value={filterType}
-              onChange={(e) => setFilterType(e.target.value)}
-              className="px-3 py-2 border border-gray-300 rounded-lg bg-white"
-            >
-              <option value="all">All Products</option>
-              <option value="INVOICE_FINANCING">Invoice Financing</option>
-              <option value="DYNAMIC_DISCOUNTING">Dynamic Discounting</option>
-              <option value="GST_FINANCING">GST Financing</option>
-            </select>
-          </div>
-        </div>
 
         {/* Loading State */}
         {loading && (
@@ -405,8 +370,15 @@ export default function AdminInvoices() {
         {!loading && filteredInvoices.length > 0 && (
           <div className="px-6 py-4 border-t border-gray-200 flex items-center justify-between">
             <span className="text-sm text-gray-600">
-              Showing {filteredInvoices.length} invoices
+              Showing {filteredInvoices.length} of {pagination.total || filteredInvoices.length} invoices
             </span>
+            <button
+              onClick={() => fetchInvoices(filters)}
+              className="flex items-center space-x-1 text-sm text-gray-600 hover:text-gray-800"
+            >
+              <RefreshCw size={14} />
+              <span>Refresh</span>
+            </button>
           </div>
         )}
       </div>

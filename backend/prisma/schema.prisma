@@ -83,6 +83,15 @@ model Buyer {
   createdAt    DateTime  @default(now()) @map("created_at")
   updatedAt    DateTime  @updatedAt @map("updated_at")
 
+  // Reliability metrics (how promptly buyer pays sellers)
+  totalInvoicesPaid    Int       @default(0) @map("total_invoices_paid")
+  onTimePayments       Int       @default(0) @map("on_time_payments")
+  latePayments         Int       @default(0) @map("late_payments")
+  onTimePaymentRate    Float?    @map("on_time_payment_rate")     // 0-100 percentage
+  avgDaysToPayment     Float?    @map("avg_days_to_payment")
+  reliabilityScore     Float?    @map("reliability_score")        // 0-100 score
+  lastMetricsUpdate    DateTime? @map("last_metrics_update")
+
   user              User                    @relation(fields: [userId], references: [id], onDelete: Cascade)
   bankAccounts      BankAccount[]
   kycDocuments      KycDocument[]
@@ -114,6 +123,14 @@ model Seller {
   kycStatus    KycStatus @default(PENDING) @map("kyc_status")
   createdAt    DateTime  @default(now()) @map("created_at")
   updatedAt    DateTime  @updatedAt @map("updated_at")
+
+  // Performance metrics (how reliably seller invoices get paid)
+  totalInvoicesSettled Int       @default(0) @map("total_invoices_settled")
+  onTimePayments       Int       @default(0) @map("on_time_payments")
+  latePayments         Int       @default(0) @map("late_payments")
+  avgDaysToPayment     Float?    @map("avg_days_to_payment")
+  performanceScore     Float?    @map("performance_score")         // 0-100 score
+  lastMetricsUpdate    DateTime? @map("last_metrics_update")
 
   user              User                     @relation(fields: [userId], references: [id], onDelete: Cascade)
   bankAccounts      BankAccount[]

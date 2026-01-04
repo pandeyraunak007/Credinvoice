@@ -820,6 +820,365 @@ export class AnalyticsService {
   }
 
   // ============================================
+  // PERFORMANCE METRICS
+  // ============================================
+
+  /**
+   * Calculate and update seller performance metrics
+   * Based on how their invoices are paid (on-time vs late)
+   */
+  async calculateSellerMetrics(sellerId: string) {
+    const seller = await prisma.seller.findUnique({ where: { id: sellerId } });
+    if (!seller) throw new Error('Seller not found');
+
+    // Get all settled invoices for this seller
+    const settledInvoices = await prisma.invoice.findMany({
+      where: {
+        sellerId: seller.id,
+        status: 'SETTLED',
+      },
+      include: {
+        disbursement: {
+          include: {
+            repayment: true,
+          },
+        },
+      },
+    });
+
+    let onTimeCount = 0;
+    let lateCount = 0;
+    let totalDaysToPayment = 0;
+    let validPayments = 0;
+
+    for (const invoice of settledInvoices) {
+      const repayment = invoice.disbursement?.repayment;
+      if (repayment && repayment.paidAt) {
+        validPayments++;
+        const daysToPayment = Math.ceil(
+          (new Date(repayment.paidAt).getTime() - new Date(invoice.createdAt).getTime()) /
+            (1000 * 60 * 60 * 24)
+        );
+        totalDaysToPayment += daysToPayment;
+
+        // Check if paid on time (before or on due date)
+        if (new Date(repayment.paidAt) <= new Date(repayment.dueDate)) {
+          onTimeCount++;
+        } else {
+          lateCount++;
+        }
+      }
+    }
+
+    const totalSettled = settledInvoices.length;
+    const avgDaysToPayment = validPayments > 0 ? totalDaysToPayment / validPayments : null;
+
+    // Performance score calculation:
+    // 60% on-time rate + 20% volume (capped at 20 for max points) + 20% consistency
+    const onTimeRate = totalSettled > 0 ? (onTimeCount / totalSettled) * 100 : 0;
+    const volumeScore = Math.min((totalSettled / 20) * 100, 100); // Max 100 at 20+ invoices
+    const consistencyScore = avgDaysToPayment
+      ? Math.max(0, 100 - avgDaysToPayment) // Lower days = higher score
+      : 50; // Default middle score
+
+    const performanceScore = onTimeRate * 0.6 + volumeScore * 0.2 + consistencyScore * 0.2;
+
+    // Update seller metrics
+    await prisma.seller.update({
+      where: { id: seller.id },
+      data: {
+        totalInvoicesSettled: totalSettled,
+        onTimePayments: onTimeCount,
+        latePayments: lateCount,
+        avgDaysToPayment,
+        performanceScore: Math.round(performanceScore * 10) / 10,
+        lastMetricsUpdate: new Date(),
+      },
+    });
+
+    return {
+      sellerId: seller.id,
+      totalInvoicesSettled: totalSettled,
+      onTimePayments: onTimeCount,
+      latePayments: lateCount,
+      avgDaysToPayment,
+      performanceScore: Math.round(performanceScore * 10) / 10,
+    };
+  }
+
+  /**
+   * Calculate and update buyer reliability metrics
+   * Based on how promptly they pay sellers/financiers
+   */
+  async calculateBuyerMetrics(buyerId: string) {
+    const buyer = await prisma.buyer.findUnique({ where: { id: buyerId } });
+    if (!buyer) throw new Error('Buyer not found');
+
+    // Get all repayments where buyer is the payer
+    const repayments = await prisma.repayment.findMany({
+      where: {
+        payerType: 'BUYER',
+        payerId: buyer.id,
+        status: { in: ['PAID', 'OVERDUE'] },
+      },
+    });
+
+    let onTimeCount = 0;
+    let lateCount = 0;
+    let totalDaysToPayment = 0;
+    let validPayments = 0;
+
+    for (const repayment of repayments) {
+      if (repayment.paidAt) {
+        validPayments++;
+        const daysToPayment = Math.ceil(
+          (new Date(repayment.paidAt).getTime() - new Date(repayment.dueDate).getTime()) /
+            (1000 * 60 * 60 * 24)
+        );
+        totalDaysToPayment += Math.abs(daysToPayment);
+
+        if (new Date(repayment.paidAt) <= new Date(repayment.dueDate)) {
+          onTimeCount++;
+        } else {
+          lateCount++;
+        }
+      }
+    }
+
+    const totalPaid = repayments.filter((r) => r.status === 'PAID').length;
+    const avgDaysToPayment = validPayments > 0 ? totalDaysToPayment / validPayments : null;
+    const onTimePaymentRate = totalPaid > 0 ? (onTimeCount / totalPaid) * 100 : null;
+
+    // Reliability score calculation:
+    // 70% on-time rate + 15% volume + 15% consistency
+    const onTimeRate = onTimePaymentRate || 0;
+    const volumeScore = Math.min((totalPaid / 10) * 100, 100); // Max 100 at 10+ payments
+    const consistencyScore = avgDaysToPayment !== null
+      ? Math.max(0, 100 - avgDaysToPayment * 5) // Penalize late days more heavily
+      : 50;
+
+    const reliabilityScore = onTimeRate * 0.7 + volumeScore * 0.15 + consistencyScore * 0.15;
+
+    // Update buyer metrics
+    await prisma.buyer.update({
+      where: { id: buyer.id },
+      data: {
+        totalInvoicesPaid: totalPaid,
+        onTimePayments: onTimeCount,
+        latePayments: lateCount,
+        onTimePaymentRate,
+        avgDaysToPayment,
+        reliabilityScore: Math.round(reliabilityScore * 10) / 10,
+        lastMetricsUpdate: new Date(),
+      },
+    });
+
+    return {
+      buyerId: buyer.id,
+      totalInvoicesPaid: totalPaid,
+      onTimePayments: onTimeCount,
+      latePayments: lateCount,
+      onTimePaymentRate,
+      avgDaysToPayment,
+      reliabilityScore: Math.round(reliabilityScore * 10) / 10,
+    };
+  }
+
+  /**
+   * Get seller performance metrics (cached from DB)
+   */
+  async getSellerMetrics(sellerId: string) {
+    const seller = await prisma.seller.findUnique({
+      where: { id: sellerId },
+      select: {
+        id: true,
+        companyName: true,
+        totalInvoicesSettled: true,
+        onTimePayments: true,
+        latePayments: true,
+        avgDaysToPayment: true,
+        performanceScore: true,
+        lastMetricsUpdate: true,
+      },
+    });
+
+    if (!seller) throw new Error('Seller not found');
+
+    // Calculate on-time rate
+    const total = seller.totalInvoicesSettled || 0;
+    const onTimeRate = total > 0 ? ((seller.onTimePayments || 0) / total) * 100 : null;
+
+    return {
+      sellerId: seller.id,
+      companyName: seller.companyName,
+      totalInvoicesSettled: seller.totalInvoicesSettled,
+      onTimePayments: seller.onTimePayments,
+      latePayments: seller.latePayments,
+      onTimeRate: onTimeRate ? Math.round(onTimeRate * 10) / 10 : null,
+      avgDaysToPayment: seller.avgDaysToPayment,
+      performanceScore: seller.performanceScore,
+      lastMetricsUpdate: seller.lastMetricsUpdate,
+    };
+  }
+
+  /**
+   * Get buyer reliability metrics (cached from DB)
+   */
+  async getBuyerMetrics(buyerId: string) {
+    const buyer = await prisma.buyer.findUnique({
+      where: { id: buyerId },
+      select: {
+        id: true,
+        companyName: true,
+        totalInvoicesPaid: true,
+        onTimePayments: true,
+        latePayments: true,
+        onTimePaymentRate: true,
+        avgDaysToPayment: true,
+        reliabilityScore: true,
+        lastMetricsUpdate: true,
+      },
+    });
+
+    if (!buyer) throw new Error('Buyer not found');
+
+    return {
+      buyerId: buyer.id,
+      companyName: buyer.companyName,
+      totalInvoicesPaid: buyer.totalInvoicesPaid,
+      onTimePayments: buyer.onTimePayments,
+      latePayments: buyer.latePayments,
+      onTimePaymentRate: buyer.onTimePaymentRate,
+      avgDaysToPayment: buyer.avgDaysToPayment,
+      reliabilityScore: buyer.reliabilityScore,
+      lastMetricsUpdate: buyer.lastMetricsUpdate,
+    };
+  }
+
+  /**
+   * Refresh all metrics (for cron job or admin trigger)
+   */
+  async refreshAllMetrics() {
+    const [sellers, buyers] = await Promise.all([
+      prisma.seller.findMany({ select: { id: true } }),
+      prisma.buyer.findMany({ select: { id: true } }),
+    ]);
+
+    const results = {
+      sellers: { updated: 0, failed: 0 },
+      buyers: { updated: 0, failed: 0 },
+    };
+
+    // Update all seller metrics
+    for (const seller of sellers) {
+      try {
+        await this.calculateSellerMetrics(seller.id);
+        results.sellers.updated++;
+      } catch (err) {
+        console.error(`Failed to update seller ${seller.id} metrics:`, err);
+        results.sellers.failed++;
+      }
+    }
+
+    // Update all buyer metrics
+    for (const buyer of buyers) {
+      try {
+        await this.calculateBuyerMetrics(buyer.id);
+        results.buyers.updated++;
+      } catch (err) {
+        console.error(`Failed to update buyer ${buyer.id} metrics:`, err);
+        results.buyers.failed++;
+      }
+    }
+
+    return results;
+  }
+
+  /**
+   * Update metrics after a payment event
+   * Called when a repayment is marked as paid
+   */
+  async updateMetricsOnPayment(repaymentId: string) {
+    const repayment = await prisma.repayment.findUnique({
+      where: { id: repaymentId },
+      include: {
+        disbursement: {
+          include: {
+            invoice: true,
+          },
+        },
+      },
+    });
+
+    if (!repayment?.disbursement?.invoice) return;
+
+    const invoice = repayment.disbursement.invoice;
+
+    // Update seller metrics
+    if (invoice.sellerId) {
+      await this.calculateSellerMetrics(invoice.sellerId);
+    }
+
+    // Update buyer metrics if buyer was the payer
+    if (repayment.payerType === 'BUYER' && invoice.buyerId) {
+      await this.calculateBuyerMetrics(invoice.buyerId);
+    }
+  }
+
+  /**
+   * Get top performing sellers
+   */
+  async getTopPerformingSellers(limit: number = 10) {
+    const sellers = await prisma.seller.findMany({
+      where: {
+        performanceScore: { not: null },
+        totalInvoicesSettled: { gte: 1 },
+      },
+      orderBy: { performanceScore: 'desc' },
+      take: limit,
+      select: {
+        id: true,
+        companyName: true,
+        totalInvoicesSettled: true,
+        onTimePayments: true,
+        performanceScore: true,
+      },
+    });
+
+    return sellers.map((s) => ({
+      ...s,
+      onTimeRate:
+        s.totalInvoicesSettled > 0
+          ? Math.round(((s.onTimePayments || 0) / s.totalInvoicesSettled) * 1000) / 10
+          : null,
+    }));
+  }
+
+  /**
+   * Get top reliable buyers
+   */
+  async getTopReliableBuyers(limit: number = 10) {
+    const buyers = await prisma.buyer.findMany({
+      where: {
+        reliabilityScore: { not: null },
+        totalInvoicesPaid: { gte: 1 },
+      },
+      orderBy: { reliabilityScore: 'desc' },
+      take: limit,
+      select: {
+        id: true,
+        companyName: true,
+        totalInvoicesPaid: true,
+        onTimePayments: true,
+        onTimePaymentRate: true,
+        reliabilityScore: true,
+      },
+    });
+
+    return buyers;
+  }
+
+  // ============================================
   // HELPER METHODS
   // ============================================
 
