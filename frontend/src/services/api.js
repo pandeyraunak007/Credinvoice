@@ -66,6 +66,21 @@ export const authService = {
     localStorage.removeItem('refreshToken');
     localStorage.removeItem('user');
   },
+
+  forgotPassword: (email) =>
+    apiRequest('/auth/forgot-password', {
+      method: 'POST',
+      body: JSON.stringify({ email }),
+    }),
+
+  resetPassword: (token, password) =>
+    apiRequest('/auth/reset-password', {
+      method: 'POST',
+      body: JSON.stringify({ token, password }),
+    }),
+
+  verifyResetToken: (token) =>
+    apiRequest(`/auth/verify-reset-token/${token}`),
 };
 
 // Profile Service

@@ -26,12 +26,13 @@ model User {
   updatedAt     DateTime  @updatedAt @map("updated_at")
 
   // Relations
-  buyer         Buyer?
-  seller        Seller?
-  financier     Financier?
-  refreshTokens RefreshToken[]
-  notifications Notification[]
-  auditLogs     AuditLog[]
+  buyer               Buyer?
+  seller              Seller?
+  financier           Financier?
+  refreshTokens       RefreshToken[]
+  passwordResetTokens PasswordResetToken[]
+  notifications       Notification[]
+  auditLogs           AuditLog[]
 
   @@map("users")
 }
@@ -46,6 +47,19 @@ model RefreshToken {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("refresh_tokens")
+}
+
+model PasswordResetToken {
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
+  token     String   @unique
+  expiresAt DateTime @map("expires_at")
+  used      Boolean  @default(false)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("password_reset_tokens")
 }
 
 // ============================================

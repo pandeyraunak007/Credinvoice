@@ -6,6 +6,8 @@ import { NotificationProvider } from './context/NotificationContext';
 // Import Auth pages
 import Login from './pages/auth/Login';
 import Register from './pages/auth/Register';
+import ForgotPassword from './pages/auth/ForgotPassword';
+import ResetPassword from './pages/auth/ResetPassword';
 
 // Import Buyer pages
 import BuyerDashboard from './pages/buyer/Dashboard';
@@ -207,6 +209,8 @@ function AppRoutes() {
           </PublicRoute>
         }
       />
+      <Route path="/forgot-password" element={<ForgotPassword />} />
+      <Route path="/reset-password" element={<ResetPassword />} />
 
       {/* KYC Routes */}
       <Route

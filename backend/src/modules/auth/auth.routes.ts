@@ -6,6 +6,8 @@ import {
   loginSchema,
   refreshTokenSchema,
   changePasswordSchema,
+  forgotPasswordSchema,
+  resetPasswordSchema,
 } from './auth.validation';
 import {
   register,
@@ -14,6 +16,9 @@ import {
   logout,
   changePassword,
   getMe,
+  forgotPassword,
+  resetPassword,
+  verifyResetToken,
 } from './auth.controller';
 
 const router = Router();
@@ -22,6 +27,11 @@ const router = Router();
 router.post('/register', validateBody(registerSchema), register);
 router.post('/login', validateBody(loginSchema), login);
 router.post('/refresh', validateBody(refreshTokenSchema), refreshToken);
+
+// Password reset routes (public)
+router.post('/forgot-password', validateBody(forgotPasswordSchema), forgotPassword);
+router.post('/reset-password', validateBody(resetPasswordSchema), resetPassword);
+router.get('/verify-reset-token/:token', verifyResetToken);
 
 // Protected routes
 router.post('/logout', authenticate, logout);

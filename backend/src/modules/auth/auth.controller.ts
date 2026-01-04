@@ -2,7 +2,7 @@ import { Request, Response } from 'express';
 import { authService } from './auth.service';
 import { sendSuccess, sendCreated, sendError } from '../../utils/response';
 import { asyncHandler } from '../../middleware/errorHandler';
-import { RegisterInput, LoginInput, ChangePasswordInput } from './auth.validation';
+import { RegisterInput, LoginInput, ChangePasswordInput, ForgotPasswordInput, ResetPasswordInput } from './auth.validation';
 
 export const register = asyncHandler(async (req: Request, res: Response) => {
   const input: RegisterInput = req.body;
@@ -56,4 +56,26 @@ export const getMe = asyncHandler(async (req: Request, res: Response) => {
 
   const profile = await authService.getProfile(req.user.userId);
   return sendSuccess(res, profile);
+});
+
+export const forgotPassword = asyncHandler(async (req: Request, res: Response) => {
+  const input: ForgotPasswordInput = req.body;
+  await authService.forgotPassword(input);
+
+  // Always return success to prevent email enumeration
+  return sendSuccess(res, null, 'If an account exists with this email, you will receive a password reset link.');
+});
+
+export const resetPassword = asyncHandler(async (req: Request, res: Response) => {
+  const input: ResetPasswordInput = req.body;
+  await authService.resetPassword(input);
+
+  return sendSuccess(res, null, 'Password reset successful. You can now login with your new password.');
+});
+
+export const verifyResetToken = asyncHandler(async (req: Request, res: Response) => {
+  const { token } = req.params;
+  const isValid = await authService.verifyResetToken(token);
+
+  return sendSuccess(res, { valid: isValid });
 });

@@ -1,9 +1,11 @@
 import { UserType } from '@prisma/client';
+import crypto from 'crypto';
 import { prisma } from '../../config/database';
 import { hashPassword, comparePassword } from '../../utils/password';
 import { generateTokenPair, verifyToken, getTokenExpiry, TokenPair } from '../../utils/jwt';
 import { AppError } from '../../middleware/errorHandler';
-import { RegisterInput, LoginInput } from './auth.validation';
+import { RegisterInput, LoginInput, ForgotPasswordInput, ResetPasswordInput } from './auth.validation';
+import { sendEmail, generatePasswordResetEmail } from '../../utils/email';
 
 export class AuthService {
   async register(input: RegisterInput): Promise<{ user: any; tokens: TokenPair }> {
@@ -235,6 +237,114 @@ export class AuthService {
 
     const { passwordHash, twoFactorSecret, ...safeUser } = user;
     return safeUser;
+  }
+
+  async forgotPassword(input: ForgotPasswordInput): Promise<void> {
+    const user = await prisma.user.findUnique({
+      where: { email: input.email },
+      include: {
+        buyer: true,
+        seller: true,
+        financier: true,
+      },
+    });
+
+    // Always return success to prevent email enumeration
+    if (!user) {
+      console.log(`Password reset requested for non-existent email: ${input.email}`);
+      return;
+    }
+
+    // Delete any existing reset tokens for this user
+    await prisma.passwordResetToken.deleteMany({
+      where: { userId: user.id },
+    });
+
+    // Generate a secure random token
+    const token = crypto.randomBytes(32).toString('hex');
+    const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
+
+    // Store the token
+    await prisma.passwordResetToken.create({
+      data: {
+        userId: user.id,
+        token,
+        expiresAt,
+      },
+    });
+
+    // Get user name from profile
+    const userName = user.buyer?.companyName || user.seller?.companyName || user.financier?.companyName;
+
+    // Generate reset link
+    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+    const resetLink = `${frontendUrl}/reset-password?token=${token}`;
+
+    // Send email
+    const { html, text } = generatePasswordResetEmail(resetLink, userName);
+    await sendEmail({
+      to: user.email,
+      subject: 'Reset Your CredInvoice Password',
+      html,
+      text,
+    });
+
+    console.log(`Password reset token generated for user: ${user.email}`);
+  }
+
+  async resetPassword(input: ResetPasswordInput): Promise<void> {
+    // Find the token
+    const resetToken = await prisma.passwordResetToken.findUnique({
+      where: { token: input.token },
+      include: { user: true },
+    });
+
+    if (!resetToken) {
+      throw new AppError('Invalid or expired reset token', 400);
+    }
+
+    if (resetToken.used) {
+      throw new AppError('This reset token has already been used', 400);
+    }
+
+    if (resetToken.expiresAt < new Date()) {
+      // Clean up expired token
+      await prisma.passwordResetToken.delete({ where: { id: resetToken.id } });
+      throw new AppError('Reset token has expired. Please request a new one.', 400);
+    }
+
+    // Hash the new password
+    const passwordHash = await hashPassword(input.password);
+
+    // Update user password and mark token as used in a transaction
+    await prisma.$transaction([
+      prisma.user.update({
+        where: { id: resetToken.userId },
+        data: { passwordHash },
+      }),
+      prisma.passwordResetToken.update({
+        where: { id: resetToken.id },
+        data: { used: true },
+      }),
+      // Invalidate all refresh tokens for security
+      prisma.refreshToken.deleteMany({
+        where: { userId: resetToken.userId },
+      }),
+    ]);
+
+    console.log(`Password reset successful for user: ${resetToken.user.email}`);
+  }
+
+  async verifyResetToken(token: string): Promise<boolean> {
+    const resetToken = await prisma.passwordResetToken.findUnique({
+      where: { token },
+    });
+
+    if (!resetToken || resetToken.used || resetToken.expiresAt < new Date()) {
+      return false;
+    }
+
+    return true;
   }
 }
 
