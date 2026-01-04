@@ -175,6 +175,7 @@ export default function Login() {
         <div className="mt-6 bg-blue-50 border border-blue-200 rounded-xl p-4 mx-4 sm:mx-0">
           <p className="text-sm font-medium text-blue-800 mb-2">Demo Credentials:</p>
           <div className="text-xs text-blue-700 space-y-1">
+            <p><strong>Admin:</strong> admin@credinvoice.com / Password1@</p>
             <p><strong>Buyer:</strong> test@example.com / Password123!</p>
             <p><strong>Seller:</strong> seller@example.com / Seller123!</p>
             <p><strong>Financier:</strong> financier@example.com / Finance123!</p>
