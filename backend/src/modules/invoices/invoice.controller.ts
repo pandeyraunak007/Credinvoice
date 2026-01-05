@@ -66,6 +66,14 @@ export const listInvoices = asyncHandler(async (req: Request, res: Response) => 
   const query = {
     status: req.query.status as any,
     productType: req.query.productType as any,
+    search: req.query.search as string | undefined,
+    minAmount: req.query.minAmount ? Number(req.query.minAmount) : undefined,
+    maxAmount: req.query.maxAmount ? Number(req.query.maxAmount) : undefined,
+    dateField: (req.query.dateField as 'createdAt' | 'dueDate') || 'createdAt',
+    startDate: req.query.startDate ? new Date(req.query.startDate as string) : undefined,
+    endDate: req.query.endDate ? new Date(req.query.endDate as string) : undefined,
+    sortBy: (req.query.sortBy as 'createdAt' | 'dueDate' | 'totalAmount') || 'createdAt',
+    sortOrder: (req.query.sortOrder as 'asc' | 'desc') || 'desc',
     page: parseInt(req.query.page as string) || 1,
     limit: parseInt(req.query.limit as string) || 20,
   };

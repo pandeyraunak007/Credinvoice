@@ -100,12 +100,12 @@ export class VendorService {
           buyerId: entityId,
           sellerId: { in: vendorIds },
         },
-        _count: { id: true },
-        _sum: { amount: true },
+        _count: { _all: true },
+        _sum: { totalAmount: true },
       });
 
       const invoiceMap = new Map(
-        invoiceCounts.map(ic => [ic.sellerId, { count: ic._count.id, totalAmount: ic._sum.amount || 0 }])
+        invoiceCounts.map(ic => [ic.sellerId, { count: ic._count?._all || 0, totalAmount: ic._sum?.totalAmount || 0 }])
       );
 
       return {
@@ -195,12 +195,12 @@ export class VendorService {
           sellerId: entityId,
           buyerId: { in: vendorIds },
         },
-        _count: { id: true },
-        _sum: { amount: true },
+        _count: { _all: true },
+        _sum: { totalAmount: true },
       });
 
       const invoiceMap = new Map(
-        invoiceCounts.map(ic => [ic.buyerId, { count: ic._count.id, totalAmount: ic._sum.amount || 0 }])
+        invoiceCounts.map(ic => [ic.buyerId, { count: ic._count?._all || 0, totalAmount: ic._sum?.totalAmount || 0 }])
       );
 
       return {
@@ -426,7 +426,7 @@ export class VendorService {
           invoiceNumber: true,
           invoiceDate: true,
           dueDate: true,
-          amount: true,
+          totalAmount: true,
           status: true,
           createdAt: true,
         },
@@ -438,8 +438,8 @@ export class VendorService {
           buyerId: entityId,
           sellerId: vendorId,
         },
-        _count: { id: true },
-        _sum: { amount: true },
+        _count: { _all: true },
+        _sum: { totalAmount: true },
       });
 
       return {
@@ -454,10 +454,10 @@ export class VendorService {
           ...mapping.seller,
           vendorType: 'SELLER',
         },
-        transactions: invoices,
+        transactions: invoices.map(i => ({ ...i, amount: i.totalAmount })),
         stats: {
-          totalInvoices: stats._count.id,
-          totalAmount: stats._sum.amount || 0,
+          totalInvoices: stats._count?._all || 0,
+          totalAmount: stats._sum?.totalAmount || 0,
         },
       };
     }
@@ -514,7 +514,7 @@ export class VendorService {
           invoiceNumber: true,
           invoiceDate: true,
           dueDate: true,
-          amount: true,
+          totalAmount: true,
           status: true,
           createdAt: true,
         },
@@ -525,8 +525,8 @@ export class VendorService {
           sellerId: entityId,
           buyerId: vendorId,
         },
-        _count: { id: true },
-        _sum: { amount: true },
+        _count: { _all: true },
+        _sum: { totalAmount: true },
       });
 
       return {
@@ -541,10 +541,10 @@ export class VendorService {
           ...mapping.buyer,
           vendorType: 'BUYER',
         },
-        transactions: invoices,
+        transactions: invoices.map(i => ({ ...i, amount: i.totalAmount })),
         stats: {
-          totalInvoices: stats._count.id,
-          totalAmount: stats._sum.amount || 0,
+          totalInvoices: stats._count?._all || 0,
+          totalAmount: stats._sum?.totalAmount || 0,
         },
       };
     }
