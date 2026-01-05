@@ -28,6 +28,7 @@ import notificationRoutes from './modules/notifications/notification.routes';
 import adminRoutes from './modules/admin/admin.routes';
 import analyticsRoutes from './modules/analytics/analytics.routes';
 import contractRoutes from './modules/contracts/contract.routes';
+import vendorRoutes from './modules/vendors/vendor.routes';
 
 export function createApp(): Express {
   const app = express();
@@ -62,6 +63,7 @@ export function createApp(): Express {
   app.use(`${API_PREFIX}/admin`, adminRoutes);
   app.use(`${API_PREFIX}/analytics`, analyticsRoutes);
   app.use(`${API_PREFIX}/contracts`, contractRoutes);
+  app.use(`${API_PREFIX}/vendors`, vendorRoutes);
 
   // 404 handler
   app.use(notFoundHandler);

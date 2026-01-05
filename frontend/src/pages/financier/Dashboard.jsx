@@ -217,6 +217,9 @@ export default function FinancierDashboard() {
                 <span className="ml-auto bg-orange-100 text-orange-700 text-xs px-2 py-0.5 rounded-full">{pendingCollections.length}</span>
               )}
             </Link>
+            <Link to="/vendors" className="flex items-center space-x-3 px-3 py-2.5 text-gray-700 hover:bg-gray-50 rounded-lg">
+              <Building2 size={20} /><span>My Partners</span>
+            </Link>
             <Link to="/financier" className="flex items-center space-x-3 px-3 py-2.5 text-gray-700 hover:bg-gray-50 rounded-lg">
               <BarChart3 size={20} /><span>Reports</span>
             </Link>

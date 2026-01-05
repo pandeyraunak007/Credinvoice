@@ -564,6 +564,51 @@ export const notificationService = {
     }),
 };
 
+// Vendor Service
+export const vendorService = {
+  // Get my vendors list with search/filter/pagination
+  getMyVendors: (params = {}) => {
+    const query = new URLSearchParams(params).toString();
+    return apiRequest(`/vendors${query ? `?${query}` : ''}`);
+  },
+
+  // Get vendor detail with transaction history
+  getVendorDetail: (vendorId) => apiRequest(`/vendors/${vendorId}`),
+
+  // Get available vendors to add (KYC approved, not already added)
+  getAvailableVendors: (search = '') => {
+    const params = search ? `?search=${encodeURIComponent(search)}` : '';
+    return apiRequest(`/vendors/available${params}`);
+  },
+
+  // Add vendor manually
+  addVendor: (data) =>
+    apiRequest('/vendors', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  // Update vendor (status, notes)
+  updateVendor: (vendorId, data) =>
+    apiRequest(`/vendors/${vendorId}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    }),
+
+  // Remove vendor (soft delete)
+  removeVendor: (vendorId) =>
+    apiRequest(`/vendors/${vendorId}`, {
+      method: 'DELETE',
+    }),
+
+  // Create vendor referral
+  referVendor: (data) =>
+    apiRequest('/vendors/refer', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+};
+
 // Contract Service
 export const contractService = {
   // Get all contracts for the current user
@@ -651,5 +696,6 @@ export default {
   admin: adminService,
   analytics: analyticsService,
   notification: notificationService,
+  vendor: vendorService,
   contract: contractService,
 };

@@ -4,7 +4,7 @@ import {
   TrendingUp, FileText, Clock, CheckCircle, XCircle,
   IndianRupee, Calendar, Building2, ChevronRight, AlertCircle,
   CreditCard, Wallet, History, HelpCircle, X, Loader2,
-  ThumbsUp, ThumbsDown, Timer, Percent, Info, Phone, Mail, Calculator, Settings, Bell
+  ThumbsUp, ThumbsDown, Timer, Percent, Info, Phone, Mail, Calculator, Settings, Bell, Users
 } from 'lucide-react';
 import { discountService, invoiceService, disbursementService } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
@@ -219,6 +219,9 @@ export function SellerDashboard() {
             </Link>
             <Link to="/seller/financing" className="flex items-center space-x-3 px-3 py-2.5 text-gray-700 hover:bg-gray-50 rounded-lg">
               <CreditCard size={20} /><span>GST Financing</span>
+            </Link>
+            <Link to="/vendors" className="flex items-center space-x-3 px-3 py-2.5 text-gray-700 hover:bg-gray-50 rounded-lg">
+              <Users size={20} /><span>My Customers</span>
             </Link>
             <Link to="/seller/contracts" className="flex items-center space-x-3 px-3 py-2.5 text-gray-700 hover:bg-gray-50 rounded-lg">
               <FileText size={20} /><span>Contracts</span>

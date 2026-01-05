@@ -4,6 +4,7 @@ import { AppError } from '../../middleware/errorHandler';
 import { notificationService } from '../notifications/notification.service';
 import { CreateInvoiceInput, UpdateInvoiceInput, ListInvoicesQuery } from './invoice.validation';
 import { extractInvoiceFromFile, getExtractedValues, InvoiceExtractionResult } from './invoice.extractor';
+import { VendorService } from '../vendors/vendor.service';
 
 export class InvoiceService {
   // Get entity info based on user type
@@ -165,6 +166,12 @@ export class InvoiceService {
           data: { invoiceId: invoice.id, invoiceNumber: data.invoiceNumber, amount: data.totalAmount },
         }).catch(err => console.error('Failed to notify financier:', err));
       }
+    }
+
+    // Auto-create buyer-seller mapping if both parties are identified
+    if (buyerId && sellerId) {
+      VendorService.autoCreateBuyerSellerMapping(buyerId, sellerId)
+        .catch(err => console.error('Failed to auto-create buyer-seller mapping:', err));
     }
 
     return invoice;

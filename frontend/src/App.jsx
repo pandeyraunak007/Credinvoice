@@ -45,6 +45,8 @@ import Account from './components/Account';
 import Notifications from './components/Notifications';
 import ContractsPage from './pages/shared/ContractsPage';
 import ContractDetailPage from './pages/shared/ContractDetailPage';
+import MyVendors from './pages/shared/MyVendors';
+import VendorDetail from './pages/shared/VendorDetail';
 
 // Import Landing page
 import Landing from './pages/Landing';
@@ -492,6 +494,22 @@ function AppRoutes() {
         element={
           <ProtectedRoute allowedRoles={['BUYER', 'SELLER', 'FINANCIER']}>
             <Notifications />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/vendors"
+        element={
+          <ProtectedRoute allowedRoles={['BUYER', 'SELLER', 'FINANCIER']}>
+            <MyVendors />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/vendors/:vendorId"
+        element={
+          <ProtectedRoute allowedRoles={['BUYER', 'SELLER', 'FINANCIER']}>
+            <VendorDetail />
           </ProtectedRoute>
         }
       />

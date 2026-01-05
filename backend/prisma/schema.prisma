@@ -183,6 +183,8 @@ model BuyerSellerMapping {
   sellerId  String        @map("seller_id")
   status    MappingStatus @default(ACTIVE)
   mappedAt  DateTime      @default(now()) @map("mapped_at")
+  notes     String?       // Optional notes about this vendor
+  addedBy   String?       @map("added_by") // 'AUTO' or 'MANUAL'
 
   buyer  Buyer  @relation(fields: [buyerId], references: [id], onDelete: Cascade)
   seller Seller @relation(fields: [sellerId], references: [id], onDelete: Cascade)
@@ -197,6 +199,8 @@ model BuyerFinancierMapping {
   financierId String        @map("financier_id")
   status      MappingStatus @default(ACTIVE)
   mappedAt    DateTime      @default(now()) @map("mapped_at")
+  notes       String?       // Optional notes about this vendor
+  addedBy     String?       @map("added_by") // 'AUTO' or 'MANUAL'
 
   buyer     Buyer     @relation(fields: [buyerId], references: [id], onDelete: Cascade)
   financier Financier @relation(fields: [financierId], references: [id], onDelete: Cascade)
@@ -211,6 +215,8 @@ model SellerFinancierMapping {
   financierId String        @map("financier_id")
   status      MappingStatus @default(ACTIVE)
   mappedAt    DateTime      @default(now()) @map("mapped_at")
+  notes       String?       // Optional notes about this vendor
+  addedBy     String?       @map("added_by") // 'AUTO' or 'MANUAL'
 
   seller    Seller    @relation(fields: [sellerId], references: [id], onDelete: Cascade)
   financier Financier @relation(fields: [financierId], references: [id], onDelete: Cascade)

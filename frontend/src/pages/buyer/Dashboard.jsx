@@ -338,7 +338,7 @@ export default function BuyerDashboard() {
                 <span className="ml-auto bg-blue-100 text-blue-700 text-xs px-2 py-0.5 rounded-full">{openForBiddingCount}</span>
               )}
             </Link>
-            <Link to="/invoices" className="flex items-center space-x-3 px-3 py-2.5 text-gray-700 hover:bg-gray-50 rounded-lg">
+            <Link to="/vendors" className="flex items-center space-x-3 px-3 py-2.5 text-gray-700 hover:bg-gray-50 rounded-lg">
               <Users size={20} />
               <span>My Vendors</span>
             </Link>
